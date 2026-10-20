@@ -1,0 +1,16 @@
+{
+  "name": "@mirror-desktop/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The message contract between the Mirror Desktop host and its UI",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.0.0"
+  }
+}

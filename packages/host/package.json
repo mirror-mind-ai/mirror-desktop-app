@@ -1,0 +1,24 @@
+{
+  "name": "@mirror-desktop/host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The Mirror Desktop host: one Node process embedding Pi and the Mirror core, serving the UI over a local socket",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.3.0",
+    "@mirror-desktop/protocol": "*",
+    "mirror-mind": "0.35.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.0"
+  }
+}

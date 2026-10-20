@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/*
+ * Theme tokens. The app themes by ROOT CLASS (`.dark` / `.light` on <html>),
+ * never by the OS media query alone, so "system" resolves to a class and every
+ * `dark:` variant follows the app's choice. The curated palettes of the
+ * predecessor app return as token sets here, one block per theme.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-display: ui-sans-serif, system-ui, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-background: #0b0d12;
+  --color-foreground: #e8eaf0;
+
+  --color-card: #12151c;
+  --color-card-foreground: #e8eaf0;
+
+  --color-muted: #1a1e27;
+  --color-muted-foreground: #9aa3b5;
+
+  --color-accent: #7c8cff;
+  --color-accent-foreground: #0b0d12;
+
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-ring: #7c8cff;
+
+  --radius-lg: 0.625rem;
+  --radius-2xl: 1rem;
+}
+
+.light {
+  --color-background: #fbfbfd;
+  --color-foreground: #14161c;
+  --color-card: #ffffff;
+  --color-card-foreground: #14161c;
+  --color-muted: #f1f2f6;
+  --color-muted-foreground: #5d6677;
+  --color-accent: #3b4fd8;
+  --color-accent-foreground: #ffffff;
+  --color-border: rgba(0, 0, 0, 0.08);
+  --color-ring: #3b4fd8;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}

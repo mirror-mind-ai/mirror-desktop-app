@@ -1,0 +1,26 @@
+{
+  "name": "mirror-desktop-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mirror Desktop — the first-party desktop application for Mirror Mind",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "packages/protocol",
+    "packages/host",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "build": "npm run build --workspace apps/desktop",
+    "dev": "npm run tauri:dev --workspace apps/desktop",
+    "host": "npm run start --workspace packages/host"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
