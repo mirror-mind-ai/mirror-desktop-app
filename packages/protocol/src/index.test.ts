@@ -53,9 +53,26 @@ describe("session protocol", () => {
     }
   });
 
-  it("rejects an empty prompt and an open without a working directory", () => {
+  it("rejects an empty prompt and an open with neither a Journey nor a directory", () => {
     expect(() => ClientRequest.parse({ id: "r", request: { type: "session.prompt", sessionId: "s1", text: "" } })).toThrow();
     expect(() => ClientRequest.parse({ id: "r", request: { type: "session.open" } })).toThrow();
+    expect(ClientRequest.parse({ id: "r", request: { type: "session.open", journey: "mirror-desktop" } }).request.type).toBe(
+      "session.open",
+    );
+  });
+
+  it("lists Journeys with an optional project path", () => {
+    const result = HostResponse.parse({
+      id: "r",
+      result: {
+        type: "journeys.list",
+        journeys: [
+          { id: "mirror-desktop", name: "Mirror Desktop", status: "active", description: "…", projectPath: "/p", parent: "mirror" },
+          { id: "finances", name: "Finances", status: "active", description: "" },
+        ],
+      },
+    });
+    expect(result.result?.type).toBe("journeys.list");
   });
 
   it("forwards only the projected session events", () => {

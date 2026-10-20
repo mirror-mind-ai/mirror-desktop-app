@@ -31,7 +31,7 @@ npm test                         # vitest, tests beside the code (*.test.ts)
 npm run build                    # tsc + vite build of the UI
 npm run dev                      # tauri dev (Vite on port 1421)
 MIRROR_HOST_TOKEN=x npm run host # run the host alone; prints {"event":"listening",...}
-npm run turn --workspace packages/host -- --cwd <dir> --prompt "…"   # one measured turn through the host
+npm run turn --workspace packages/host -- --journey <slug> --prompt "…"   # one measured turn, bound to a Journey
 HOME=/tmp/fresh npm run login --workspace packages/host -- --provider anthropic --type oauth --select browser --cancel-on-url
 cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
 npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node and the staged host
@@ -62,7 +62,13 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
   expose yet is a Core-owned prerequisite: it is implemented in the Mirror
   repository with its own tests and release, recorded in
   `docs/project/history/predecessor.md`, and only then consumed here. Never
-  fork Mirror behavior in this repository.
+  fork Mirror behavior in this repository. `packages/host/src/mirror.ts` is
+  the one file allowed to reach past the public surface, and each reach is
+  listed in that ledger.
+- **A session is bound to Mirror by name.** Everything the agent runs sees
+  `MIRROR_SESSION_ID` (the session file); Journey binding goes through
+  `mirror mirror load --journey … --session-id …`, the front door, never
+  through SQL writes from this repository.
 - **Single conversation writer.** Conversation logging into `memory.db`
   happens through Mirror's own Pi extension inside the embedded session. The
   desktop never appends conversations itself.

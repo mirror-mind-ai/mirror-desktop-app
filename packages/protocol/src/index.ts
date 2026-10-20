@@ -14,7 +14,7 @@
 import { z } from "zod";
 
 /** Bumped on any breaking change to the schemas below. */
-export const PROTOCOL_VERSION = "0.3.0";
+export const PROTOCOL_VERSION = "0.4.0";
 
 // --- Client → host --------------------------------------------------------
 
@@ -34,15 +34,27 @@ export const PingRequest = z.object({
   type: z.literal("ping"),
 });
 
+/** The Journeys Mirror knows, for the picker. */
+export const JourneysListRequest = z.object({
+  type: z.literal("journeys.list"),
+});
+
 /**
- * Open a Pi session for a working directory — a Journey's project path. The
+ * Open a Pi session for a Journey — in its project path, with its Mirror
+ * conversation bound from the first message — or for a bare directory. The
  * session is persistent and lives where terminal Pi keeps its own, so the
  * two can see each other's conversations.
  */
-export const SessionOpenRequest = z.object({
-  type: z.literal("session.open"),
-  cwd: z.string().min(1),
-});
+export const SessionOpenRequest = z
+  .object({
+    type: z.literal("session.open"),
+    journey: z.string().min(1).optional(),
+    /** Required without a Journey; with one, overrides the Journey's project path. */
+    cwd: z.string().min(1).optional(),
+  })
+  .refine((request) => request.journey !== undefined || request.cwd !== undefined, {
+    message: "session.open needs a journey or a cwd",
+  });
 
 /** Send a user prompt to an open session. Accepted, not completed: follow the events. */
 export const SessionPromptRequest = z.object({
@@ -109,6 +121,7 @@ export const ModelsAvailableRequest = z.object({
 export const ClientRequestBody = z.discriminatedUnion("type", [
   HelloRequest,
   PingRequest,
+  JourneysListRequest,
   SessionOpenRequest,
   SessionPromptRequest,
   SessionAbortRequest,
@@ -153,12 +166,29 @@ export const ModelRef = z.object({
   id: z.string(),
 });
 
+export const Journey = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.string(),
+  description: z.string(),
+  projectPath: z.string().optional(),
+  parent: z.string().optional(),
+});
+
+export const JourneysListResult = z.object({
+  type: z.literal("journeys.list"),
+  journeys: z.array(Journey),
+});
+
 export const SessionOpenResult = z.object({
   type: z.literal("session.open"),
   sessionId: z.string().min(1),
   /** Pi's own session file; the same path the Mirror logger records against. */
   sessionFile: z.string().min(1),
   cwd: z.string().min(1),
+  /** The Journey the session was opened for and its Mirror conversation, once bound. */
+  journey: z.string().optional(),
+  mirrorConversationId: z.string().optional(),
   model: ModelRef.optional(),
   thinkingLevel: z.string(),
   /** Resources that failed to load for this session, one line each; empty when all loaded. */
@@ -231,6 +261,7 @@ export const ModelsAvailableResult = z.object({
 export const HostResultBody = z.discriminatedUnion("type", [
   HelloResult,
   PingResult,
+  JourneysListResult,
   SessionOpenResult,
   SessionPromptResult,
   SessionAbortResult,
@@ -252,6 +283,9 @@ export const HostError = z.object({
     "session_not_found",
     "session_open_failed",
     "session_busy",
+    "mirror_not_configured",
+    "journey_not_found",
+    "journey_has_no_project_path",
     "auth_provider_not_found",
     "auth_in_progress",
     "auth_prompt_not_found",
@@ -386,6 +420,7 @@ export type ClientRequest = z.infer<typeof ClientRequest>;
 export type HostIdentity = z.infer<typeof HostIdentity>;
 export type ModelRef = z.infer<typeof ModelRef>;
 export type SessionOpenResult = z.infer<typeof SessionOpenResult>;
+export type Journey = z.infer<typeof Journey>;
 export type HostResultBody = z.infer<typeof HostResultBody>;
 export type HostError = z.infer<typeof HostError>;
 export type HostResponse = z.infer<typeof HostResponse>;

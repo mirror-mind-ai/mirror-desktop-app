@@ -87,4 +87,7 @@ and release before the desktop consumes it.
 | # | Prerequisite | Why | Status |
 |---|---|---|---|
 | 1 | A package entry point for `mirror-mind` (`exports` → `./ts/src/index.ts`) | Today the public API is reachable only by path (`mirror-mind/ts/src/index.ts`); the host also needs a load hook because Node will not strip types under `node_modules` | open |
-| 2 | Typed read models for what is CLI-rendered only (journey list with status and stage, tasks, week, welcome card data) | The desktop renders screens from rows, not from terminal text | open |
+| 2 | Export the read models the host deep-imports today: `resolveDbPath` (frontDoor/dbPath.ts), `listJourneyDtos` (mcp/readModels.ts), `getRuntimeSession` (mirror/runtimeSession.ts); then typed read models for what is still CLI-rendered only (journey status and stage, tasks, week, welcome card data) | The desktop renders screens from rows, not from terminal text; `packages/host/src/mirror.ts` is the one file reaching past `ts/src/index.ts` | open |
+| 3 | A per-session guard in the Pi logger extension instead of the process-wide `globalThis.__mirrorLoggerRegistered` | A host opens several sessions in one process; today every session after the first is silent unless the host clears the guard (spike 4) | open |
+| 4 | Session-scoped operating-mode activation in `mirror mirror load` / `build load` when a session is named | Conversation binding is per session, mode activation is global; two open sessions report the last activation (the predecessor's CR094) | open |
+| 5 | An interface name at binding time (`mirror mirror load --interface …`, or a session registration that carries it) | A conversation bound before its first message is labeled `claude_code` | open |

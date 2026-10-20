@@ -11,6 +11,13 @@
 // Sessions persist where terminal Pi keeps them (`~/.pi/agent/sessions/<cwd>`),
 // so a conversation started here can be resumed with `pi -r` and vice versa.
 //
+// A session opened for a Journey is bound to it the way a terminal session
+// is: every command the agent runs sees `MIRROR_SESSION_ID`, so a `mirror …`
+// it runs binds to this session and no other; and at open the host runs
+// `mirror mirror load` for the Journey, which binds the session's Mirror
+// conversation before the first message and yields the Journey's context,
+// carried in the system prompt from then on.
+//
 // Pi's events are projected onto the protocol's `SessionEvent` union and
 // handed to the server, which fans them out to authenticated clients.
 
@@ -18,14 +25,18 @@ import {
   type AgentSession,
   type AgentSessionEvent,
   createAgentSession,
+  createBashToolDefinition,
   DefaultResourceLoader,
   getAgentDir,
   type ModelRuntime,
   SessionManager,
   SettingsManager,
+  type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import type { HostEvent, SessionEvent, SessionOpenResult } from "@mirror-desktop/protocol";
 import { fileURLToPath } from "node:url";
+
+import { bindSessionToJourney, conversationForSession, journeyProjectPath } from "./mirror.ts";
 
 /**
  * The installed Mirror package root; a Pi package (extension + skills) by its
@@ -43,7 +54,13 @@ export type HostEventListener = (event: HostEvent) => void;
 interface OpenSession {
   session: AgentSession;
   cwd: string;
+  journey?: string;
   unsubscribe: () => void;
+}
+
+export interface OpenSessionRequest {
+  journey?: string;
+  cwd?: string;
 }
 
 export class SessionOpenError extends Error {
@@ -58,10 +75,23 @@ export class SessionBusyError extends Error {
   override readonly name = "SessionBusyError";
 }
 
+/**
+ * Mirror's logger extension registers once per PROCESS: a module-level guard
+ * on `globalThis`, there to stop a terminal session that discovers the same
+ * file twice from logging every turn twice. In a host that opens several
+ * sessions in one process, the guard makes every session after the first
+ * silent. Until the core scopes the guard per session (a Core-owned
+ * prerequisite), the host clears it before each session loads its
+ * extensions — and serializes session opening so two loads cannot race
+ * over it. Within one load the guard still works as designed.
+ */
+const MIRROR_LOGGER_GUARD = "__mirrorLoggerRegistered";
+
 export class SessionRegistry {
   readonly #sessions = new Map<string, OpenSession>();
   readonly #listeners = new Set<HostEventListener>();
   readonly #modelRuntime: ModelRuntime;
+  #opening: Promise<unknown> = Promise.resolve();
 
   /** One model runtime for every session: a sign-in applies to the next turn, no restart. */
   constructor(modelRuntime: ModelRuntime) {
@@ -74,18 +104,42 @@ export class SessionRegistry {
     return () => this.#listeners.delete(listener);
   }
 
-  async open(cwd: string): Promise<SessionOpenResult> {
+  open(request: OpenSessionRequest): Promise<SessionOpenResult> {
+    const next = this.#opening.then(() => this.#open(request));
+    this.#opening = next.catch(() => undefined);
+    return next;
+  }
+
+  async #open(request: OpenSessionRequest): Promise<SessionOpenResult> {
+    const journey = request.journey;
+    const cwd = request.cwd ?? (journey ? journeyProjectPath(journey) : undefined);
+    if (!cwd) throw new SessionOpenError("A session needs a Journey or a directory.");
     const agentDir = getAgentDir();
     let session: AgentSession;
     let diagnostics: string[] = [];
+    // Filled once the Journey is bound; read by the system-prompt hook on every run.
+    const journeyContext = { text: "" };
     try {
       const settingsManager = SettingsManager.create(cwd, agentDir);
+      const sessionManager = SessionManager.create(cwd);
       const resourceLoader = new DefaultResourceLoader({
         cwd,
         agentDir,
         settingsManager,
         additionalExtensionPaths: [MIRROR_PACKAGE_ROOT],
+        extensionFactories: [
+          (pi) => {
+            pi.on("before_agent_start", (event) => {
+              if (!journey || !journeyContext.text) return;
+              event.systemPromptOptions.contextFiles.push({
+                path: `mirror://journey/${journey}`,
+                content: journeyContext.text,
+              });
+            });
+          },
+        ],
       });
+      delete (globalThis as Record<string, unknown>)[MIRROR_LOGGER_GUARD];
       await resourceLoader.reload();
       const created = await createAgentSession({
         cwd,
@@ -93,7 +147,21 @@ export class SessionRegistry {
         modelRuntime: this.#modelRuntime,
         settingsManager,
         resourceLoader,
-        sessionManager: SessionManager.create(cwd),
+        sessionManager,
+        // The built-in bash tool, plus this session's identity for Mirror:
+        // a `mirror …` the agent runs binds to this session by name instead
+        // of guessing the most recent one — the guess that once moved other
+        // Journeys' cursors in the predecessor.
+        customTools: [
+          // The cast is the SDK boundary: `customTools` takes the unparameterized
+          // ToolDefinition, and the bash definition's typed schema does not widen to it.
+          createBashToolDefinition(cwd, {
+            spawnHook: (context) => {
+              const sessionFile = sessionManager.getSessionFile();
+              return sessionFile ? { ...context, env: { ...context.env, MIRROR_SESSION_ID: sessionFile } } : context;
+            },
+          }) as unknown as ToolDefinition,
+        ],
       });
       session = created.session;
       // A resource that failed to load is a fact the UI must be able to show;
@@ -109,7 +177,7 @@ export class SessionRegistry {
       const projected = projectEvent(event);
       if (projected) this.#emit({ type: "session.event", sessionId, at: Date.now(), event: projected });
     });
-    this.#sessions.set(sessionId, { session, cwd, unsubscribe });
+    this.#sessions.set(sessionId, { session, cwd, ...(journey ? { journey } : {}), unsubscribe });
 
     // Emits `session_start` to every extension — the Mirror logger opens its
     // conversation here — with no TUI: `ctx.hasUI` is false, so extensions
@@ -132,12 +200,30 @@ export class SessionRegistry {
       await this.close(sessionId);
       throw new SessionOpenError("Pi did not create a session file.");
     }
+
+    // After `session_start`, which resets Mirror's global orientation: the
+    // binding is per session and must not be reset by it.
+    let mirrorConversationId: string | undefined;
+    if (journey) {
+      try {
+        const binding = await bindSessionToJourney(sessionFile, journey);
+        journeyContext.text = binding.context;
+        mirrorConversationId = conversationForSession(sessionFile);
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        diagnostics = [...diagnostics, `mirror: could not bind the session to Journey ${journey}: ${message}`];
+        process.stderr.write(`mirror-host: ${diagnostics[diagnostics.length - 1]}\n`);
+      }
+    }
+
     const model = session.model;
     return {
       type: "session.open",
       sessionId,
       sessionFile,
       cwd,
+      ...(journey ? { journey } : {}),
+      ...(mirrorConversationId ? { mirrorConversationId } : {}),
       ...(model ? { model: { provider: model.provider, id: model.id } } : {}),
       thinkingLevel: session.thinkingLevel,
       diagnostics,

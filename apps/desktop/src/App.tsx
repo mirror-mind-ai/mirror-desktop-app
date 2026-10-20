@@ -1,5 +1,5 @@
-import type { HostEvent, HostIdentity, SessionEvent } from "@mirror-desktop/protocol";
-import { KeyRound, Loader2, Send, Sparkles, Square } from "lucide-react";
+import type { HostEvent, HostIdentity, Journey, SessionEvent } from "@mirror-desktop/protocol";
+import { Compass, KeyRound, Loader2, Send, Sparkles, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
 
@@ -22,6 +22,8 @@ type Row =
 interface Session {
   id: string;
   file: string;
+  journey?: string;
+  mirrorConversationId?: string;
   model?: string;
   thinkingLevel: string;
 }
@@ -32,9 +34,10 @@ export function App() {
   /** Whether any model can be used; null until the host answered. */
   const [canUseModels, setCanUseModels] = useState<boolean | null>(null);
   const [showProviders, setShowProviders] = useState(false);
-  const [cwd, setCwd] = useState("/Users/vinicius/dev/workspace/mirror-desktop-app");
+  const [journeys, setJourneys] = useState<Journey[] | null>(null);
+  const [journeysError, setJourneysError] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [opening, setOpening] = useState(false);
+  const [opening, setOpening] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
@@ -62,8 +65,15 @@ export function App() {
       .then((result) => {
         if (result && result.type === "models.available") setCanUseModels(result.models.length > 0);
       })
+      .then(() => active?.request({ type: "journeys.list" }))
+      .then((result) => {
+        if (result && result.type === "journeys.list") setJourneys(result.journeys);
+      })
       .catch((error: unknown) => {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : String(error));
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : String(error);
+        setJourneysError(message);
+        toast.error(message);
       });
     return () => {
       cancelled = true;
@@ -85,23 +95,25 @@ export function App() {
     if (event.event.type === "agent_settled") setBusy(false);
   }
 
-  async function openSession(): Promise<void> {
+  async function openSession(journey: string): Promise<void> {
     if (!client) return;
-    setOpening(true);
+    setOpening(journey);
     try {
-      const result = await client.request({ type: "session.open", cwd });
+      const result = await client.request({ type: "session.open", journey });
       if (result.type !== "session.open") return;
       setSession({
         id: result.sessionId,
         file: result.sessionFile,
+        ...(result.journey ? { journey: result.journey } : {}),
+        ...(result.mirrorConversationId ? { mirrorConversationId: result.mirrorConversationId } : {}),
         ...(result.model ? { model: `${result.model.provider}/${result.model.id}` } : {}),
         thinkingLevel: result.thinkingLevel,
       });
-      setRows([]);
+      setRows(result.diagnostics.map((text) => ({ kind: "notice", text })));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
-      setOpening(false);
+      setOpening(null);
     }
   }
 
@@ -154,38 +166,52 @@ export function App() {
           {...(canUseModels ? { onDismiss: () => setShowProviders(false) } : {})}
         />
       ) : !session ? (
-        <section className="flex flex-1 items-center justify-center p-8">
-          <form
-            className="flex w-full max-w-xl flex-col gap-3 rounded-2xl border border-border bg-card p-6"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void openSession();
-            }}
-          >
-            <label className="text-sm text-muted-foreground" htmlFor="cwd">
-              Working directory of the Journey
-            </label>
-            <input
-              id="cwd"
-              className="rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
-              value={cwd}
-              onChange={(event) => setCwd(event.target.value)}
-              spellCheck={false}
-            />
-            <button
-              type="submit"
-              disabled={!client || opening}
-              className="flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-50"
-            >
-              {opening ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-              {opening ? "Opening session…" : "Open session"}
-            </button>
-          </form>
+        <section className="flex flex-1 justify-center overflow-y-auto p-8">
+          <div className="flex w-full max-w-2xl flex-col gap-3">
+            <h1 className="font-display text-xl font-semibold">Open a Journey</h1>
+            {journeysError ? <p className="text-sm text-amber-400">{journeysError}</p> : null}
+            {journeys === null ? (
+              <p className="text-sm text-muted-foreground">Loading Journeys from Mirror…</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {journeys
+                  .filter((journey) => journey.status === "active")
+                  .map((journey) => (
+                    <li key={journey.id}>
+                      <button
+                        type="button"
+                        disabled={!journey.projectPath || opening !== null}
+                        onClick={() => void openSession(journey.id)}
+                        title={journey.projectPath ?? "This Journey has no project path yet"}
+                        className="flex w-full items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-left hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {opening === journey.id ? (
+                          <Loader2 className="size-4 shrink-0 animate-spin text-accent" aria-hidden="true" />
+                        ) : (
+                          <Compass className="size-4 shrink-0 text-accent" aria-hidden="true" />
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium">{journey.name}</span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {journey.description || journey.id}
+                          </span>
+                        </span>
+                        <span className="shrink-0 truncate font-mono text-[11px] text-muted-foreground">
+                          {journey.projectPath ? journey.projectPath.replace(/^\/Users\/[^/]+/, "~") : "no project path"}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
         </section>
       ) : (
         <>
           <div className="border-b border-border px-5 py-2 font-mono text-xs text-muted-foreground">
-            session {session.id} · {session.model ?? "model?"} · thinking {session.thinkingLevel}
+            {session.journey ? `${session.journey} · ` : ""}session {session.id}
+            {session.mirrorConversationId ? ` · mirror conversation ${session.mirrorConversationId}` : ""} · {session.model ?? "model?"} ·
+            thinking {session.thinkingLevel}
           </div>
           <div ref={transcriptRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
             {rows.map((row, index) => (

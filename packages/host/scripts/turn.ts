@@ -32,7 +32,8 @@ const option = (name: string): string | undefined => {
   const index = args.indexOf(name);
   return index === -1 ? undefined : args[index + 1];
 };
-const cwd = option("--cwd") ?? process.cwd();
+const journey = option("--journey");
+const cwd = option("--cwd") ?? (journey ? undefined : process.cwd());
 const promptText = option("--prompt") ?? "Reply with the single word: pong";
 
 const HOST_ENTRY = option("--entry") ?? fileURLToPath(new URL("../src/main.ts", import.meta.url));
@@ -41,9 +42,11 @@ const token = randomBytes(16).toString("hex");
 const t0 = performance.now();
 const since = (): string => `${(performance.now() - t0).toFixed(0).padStart(6)} ms`;
 
+// stdin is a pipe held open on purpose: the host shuts down when it closes,
+// which is how the shell's death reaches it.
 const host = spawn(NODE, [HOST_ENTRY], {
   env: { ...process.env, MIRROR_HOST_TOKEN: token },
-  stdio: ["ignore", "pipe", "pipe"],
+  stdio: ["pipe", "pipe", "pipe"],
 });
 host.stderr.on("data", (chunk: Buffer) => process.stderr.write(`[host] ${chunk}`));
 host.on("exit", (code) => console.log(`${since()}  host exited (${code})`));
@@ -90,11 +93,16 @@ async function request<T extends HostResultBody["type"]>(
 const hello = await request({ type: "hello", token, protocolVersion: PROTOCOL_VERSION }, "hello");
 console.log(`${since()}  hello: node ${hello.host.node}, pi ${hello.host.pi}, mirror ${hello.host.mirror}`);
 
-const opened = await request({ type: "session.open", cwd }, "session.open");
+const opened = await request(
+  { type: "session.open", ...(journey ? { journey } : {}), ...(cwd ? { cwd } : {}) },
+  "session.open",
+);
 console.log(
   `${since()}  session open: ${opened.sessionId} (${opened.model?.provider}/${opened.model?.id}, thinking ${opened.thinkingLevel})`,
 );
 console.log(`           session file: ${opened.sessionFile}`);
+console.log(`           cwd: ${opened.cwd}`);
+if (opened.journey) console.log(`           journey: ${opened.journey} · mirror conversation ${opened.mirrorConversationId ?? "(unbound)"}`);
 for (const line of opened.diagnostics) console.log(`           ⚠ ${line}`);
 
 const settled = new Promise<void>((resolve) => {
@@ -152,4 +160,4 @@ console.log(`           turn took ${(performance.now() - promptSentAt).toFixed(0
 await request({ type: "session.close", sessionId: opened.sessionId }, "session.close");
 console.log(`${since()}  session closed`);
 socket.close();
-host.kill("SIGTERM");
+host.stdin.end();

@@ -38,6 +38,13 @@ import {
   AuthPromptNotFoundError,
   AuthProviderNotFoundError,
 } from "./auth.ts";
+import {
+  JourneyHasNoProjectPathError,
+  JourneyNotFoundError,
+  listJourneys,
+  loadMirrorConfiguration,
+  MirrorNotConfiguredError,
+} from "./mirror.ts";
 import { materializeRuntimeBin } from "./runtimeBin.ts";
 import { SessionBusyError, SessionNotFoundError, SessionOpenError, SessionRegistry } from "./sessions.ts";
 
@@ -54,6 +61,9 @@ if (!TOKEN) {
 
 const startedAt = Date.now();
 const instanceId = newId();
+// Mirror's configuration first: everything after this — the shims, the
+// extension, every `mirror` the agent runs — inherits what it resolved.
+loadMirrorConfiguration();
 const runtimeBin = materializeRuntimeBin();
 process.stderr.write(`mirror-host: runtime ${process.execPath} · bin ${runtimeBin}\n`);
 const authenticatedSockets = new Set<WebSocket>();
@@ -103,8 +113,13 @@ async function handle(
     switch (request.type) {
       case "ping":
         return { type: "ping", uptimeMs: Date.now() - startedAt };
+      case "journeys.list":
+        return { type: "journeys.list", journeys: listJourneys() };
       case "session.open":
-        return await sessions.open(request.cwd);
+        return await sessions.open({
+          ...(request.journey !== undefined ? { journey: request.journey } : {}),
+          ...(request.cwd !== undefined ? { cwd: request.cwd } : {}),
+        });
       case "session.prompt":
         sessions.prompt(request.sessionId, request.text);
         return { type: "session.prompt", sessionId: request.sessionId };
@@ -141,6 +156,9 @@ function failureOf(cause: unknown): HostError {
   if (cause instanceof SessionNotFoundError) return error("session_not_found", cause.message);
   if (cause instanceof SessionBusyError) return error("session_busy", cause.message);
   if (cause instanceof SessionOpenError) return error("session_open_failed", cause.message);
+  if (cause instanceof MirrorNotConfiguredError) return error("mirror_not_configured", cause.message);
+  if (cause instanceof JourneyNotFoundError) return error("journey_not_found", cause.message);
+  if (cause instanceof JourneyHasNoProjectPathError) return error("journey_has_no_project_path", cause.message);
   if (cause instanceof AuthProviderNotFoundError) return error("auth_provider_not_found", cause.message);
   if (cause instanceof AuthInProgressError) return error("auth_in_progress", cause.message);
   if (cause instanceof AuthPromptNotFoundError) return error("auth_prompt_not_found", cause.message);
