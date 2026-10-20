@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "build": {
+    "beforeBuildCommand": "npm run build && npm run fetch:node && npm run stage:host"
+  },
+  "bundle": {
+    "externalBin": ["binaries/mirror-node"],
+    "resources": {
+      "resources/host": "host"
+    }
+  }
+}

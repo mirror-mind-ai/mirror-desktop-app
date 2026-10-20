@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      The embedded `mirror-node` sidecar is V8, which allocates writable-
+      executable pages (MAP_JIT). Under the hardened runtime it dies at the
+      first JIT allocation without this entitlement. The bundler applies this
+      plist to every signed target, so the main binary carries it too — the
+      widening Kia Desktop reviewed and accepted (D112): the bundle ships an
+      entitled, JIT-capable interpreter beside the app by design.
+
+      Never add `com.apple.security.cs.allow-unsigned-executable-memory` here:
+      it is a categorically weaker posture than allow-jit.
+    -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+</dict>
+</plist>

@@ -49,7 +49,7 @@ written on close. The host wrote none of it.
    (`abort()` → `extensionRunner.emit({type: "session_shutdown"})` → `dispose()`).
    Without it the Mirror conversation stays open until maintenance closes it.
 2. **Node refuses to strip types under `node_modules`.** The host registers a
-   load hook scoped to the `mirror-mind` package (as Mirror's own bins do) and
+   load hook scoped to the `mirror-mind` and protocol packages (as Mirror’s own bins do) and
    imports its server dynamically after registering it.
 3. **Journey binding is not automatic.** The logged conversations carry no
    Journey because nothing activated a mode for the session. In a terminal

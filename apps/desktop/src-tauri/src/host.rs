@@ -6,10 +6,14 @@
 //! webview through the `host_endpoint` command and the `host-ready` event.
 //! Everything after that happens between the webview and the host directly.
 //!
-//! In development the host is `node packages/host/src/main.ts` from the
-//! repository; a bundled app runs the embedded runtime instead (spike 2).
+//! A bundled app runs the host on the embedded runtime: the `mirror-node`
+//! sidecar beside the executable, over the staged host in the app's
+//! resources. In a checkout neither exists, and the host is
+//! `node packages/host/src/main.ts` from the repository — the development
+//! fallback, never chosen when the embedded runtime is present.
 
 use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 
@@ -41,25 +45,56 @@ fn mint_token() -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// The host entry for a development run, resolved from this crate's location in the repository.
-fn development_host_entry() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// Which Node runs the host, and which host.
+struct HostRuntime {
+    node: PathBuf,
+    entry: PathBuf,
+    kind: &'static str,
+}
+
+/// The embedded runtime when the bundle carries it; the checkout's otherwise.
+fn resolve_runtime(app: &AppHandle) -> Result<HostRuntime, String> {
+    let sidecar_name = if cfg!(windows) { "mirror-node.exe" } else { "mirror-node" };
+    let sidecar = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(sidecar_name)));
+    let staged_entry = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|dir| dir.join("host").join("src").join("main.ts"));
+    if let (Some(node), Some(entry)) = (sidecar, staged_entry) {
+        if node.is_file() && entry.is_file() {
+            return Ok(HostRuntime { node, entry, kind: "embedded" });
+        }
+    }
+    let entry = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../packages/host/src/main.ts")
         .canonicalize()
-        .expect("packages/host/src/main.ts exists beside the shell in a checkout")
+        .map_err(|_| "no embedded runtime, and no packages/host/src/main.ts beside the shell".to_string())?;
+    Ok(HostRuntime { node: PathBuf::from("node"), entry, kind: "development" })
 }
 
 pub fn spawn(app: &AppHandle) -> Result<(), String> {
     let token = mint_token();
-    let entry = development_host_entry();
-    let mut child = Command::new("node")
-        .arg(&entry)
+    let runtime = resolve_runtime(app)?;
+    let runtime_bin = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("no app data directory: {error}"))?
+        .join("runtime")
+        .join("bin");
+    log_line(&format!("host: {} runtime {} · {}", runtime.kind, runtime.node.display(), runtime.entry.display()));
+    let mut child = Command::new(&runtime.node)
+        .arg(&runtime.entry)
         .env("MIRROR_HOST_TOKEN", &token)
-        .stdin(Stdio::null())
+        .env("MIRROR_DESKTOP_RUNTIME_DIR", &runtime_bin)
+        // Held open for the shell's lifetime: the host shuts down when it closes.
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
-        .map_err(|error| format!("could not start the host with `node {}`: {error}", entry.display()))?;
+        .map_err(|error| format!("could not start the host with `{} {}`: {error}", runtime.node.display(), runtime.entry.display()))?;
 
     let stdout = child.stdout.take().ok_or("host stdout is unavailable")?;
     {

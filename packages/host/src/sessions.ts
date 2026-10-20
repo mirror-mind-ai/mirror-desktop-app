@@ -24,9 +24,15 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import type { HostEvent, SessionEvent, SessionOpenResult } from "@mirror-desktop/protocol";
+import { fileURLToPath } from "node:url";
 
-/** The installed Mirror package root; a Pi package (extension + skills) by its manifest. */
-const MIRROR_PACKAGE_ROOT = new URL("./", import.meta.resolve("mirror-mind/package.json")).pathname.replace(
+/**
+ * The installed Mirror package root; a Pi package (extension + skills) by its
+ * manifest. Through `fileURLToPath`, never `URL.pathname`: inside
+ * "Mirror Desktop.app" the latter yields `Mirror%20Desktop.app`, a path that
+ * does not exist, and the package silently fails to load.
+ */
+const MIRROR_PACKAGE_ROOT = fileURLToPath(new URL("./", import.meta.resolve("mirror-mind/package.json"))).replace(
   /\/$/,
   "",
 );
@@ -64,6 +70,7 @@ export class SessionRegistry {
   async open(cwd: string): Promise<SessionOpenResult> {
     const agentDir = getAgentDir();
     let session: AgentSession;
+    let diagnostics: string[] = [];
     try {
       const settingsManager = SettingsManager.create(cwd, agentDir);
       const resourceLoader = new DefaultResourceLoader({
@@ -81,6 +88,10 @@ export class SessionRegistry {
         sessionManager: SessionManager.create(cwd),
       });
       session = created.session;
+      // A resource that failed to load is a fact the UI must be able to show;
+      // the Mirror package failing here means no conversation gets logged.
+      diagnostics = created.extensionsResult.errors.map((failure) => `${failure.path}: ${failure.error}`);
+      for (const line of diagnostics) process.stderr.write(`mirror-host: extension ${line}\n`);
     } catch (cause) {
       throw new SessionOpenError(cause instanceof Error ? cause.message : String(cause), { cause });
     }
@@ -121,6 +132,7 @@ export class SessionRegistry {
       cwd,
       ...(model ? { model: { provider: model.provider, id: model.id } } : {}),
       thinkingLevel: session.thinkingLevel,
+      diagnostics,
     };
   }
 

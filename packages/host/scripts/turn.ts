@@ -5,6 +5,11 @@
 // the session and the host, and reports how long each stage took:
 //
 //   npm run turn --workspace packages/host -- [--cwd <dir>] [--prompt "<text>"]
+//                                            [--node <binary>] [--entry <main.ts>]
+//
+// `--node` and `--entry` point it at another runtime and host — the embedded
+// sidecar and the staged host inside a bundle — so a bundle can be driven
+// from the terminal with a bare PATH, exactly as a clean machine would run it.
 //
 // It is the same path the UI will take; what it measures is what the person
 // will feel.
@@ -30,12 +35,13 @@ const option = (name: string): string | undefined => {
 const cwd = option("--cwd") ?? process.cwd();
 const promptText = option("--prompt") ?? "Reply with the single word: pong";
 
-const HOST_ENTRY = fileURLToPath(new URL("../src/main.ts", import.meta.url));
+const HOST_ENTRY = option("--entry") ?? fileURLToPath(new URL("../src/main.ts", import.meta.url));
+const NODE = option("--node") ?? process.execPath;
 const token = randomBytes(16).toString("hex");
 const t0 = performance.now();
 const since = (): string => `${(performance.now() - t0).toFixed(0).padStart(6)} ms`;
 
-const host = spawn(process.execPath, [HOST_ENTRY], {
+const host = spawn(NODE, [HOST_ENTRY], {
   env: { ...process.env, MIRROR_HOST_TOKEN: token },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -89,6 +95,7 @@ console.log(
   `${since()}  session open: ${opened.sessionId} (${opened.model?.provider}/${opened.model?.id}, thinking ${opened.thinkingLevel})`,
 );
 console.log(`           session file: ${opened.sessionFile}`);
+for (const line of opened.diagnostics) console.log(`           ⚠ ${line}`);
 
 const settled = new Promise<void>((resolve) => {
   let firstDeltaAt: number | undefined;

@@ -33,16 +33,25 @@ npm run dev                      # tauri dev (Vite on port 1421)
 MIRROR_HOST_TOKEN=x npm run host # run the host alone; prints {"event":"listening",...}
 npm run turn --workspace packages/host -- --cwd <dir> --prompt "…"   # one measured turn through the host
 cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
+npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node and the staged host
+                                          # (APPLE_SIGNING_IDENTITY="…" to sign; ad-hoc otherwise)
 ```
 
 ## Rules
 
-- **Node 24 is the floor.** The host and the Mirror core run TypeScript with no
-  build step. Node refuses to strip types under `node_modules`, so the host
-  registers a load hook for the `mirror-mind` package only
-  (`packages/host/src/mirrorLoader.ts`) and imports the server dynamically
-  after it. Keep host code erasable-syntax only (no enums, no parameter
-  properties).
+- **Node 24 is the floor, and the bundle ships its own.** The host and the
+  Mirror core run TypeScript with no build step on the embedded
+  `mirror-node` sidecar (fetched hash-pinned from nodejs.org at build time)
+  over the staged host in the app's resources. Node refuses to strip types
+  under `node_modules`, so the host registers a load hook for the
+  `mirror-mind` and protocol packages only (`packages/host/src/typeStripping.ts`)
+  and imports the server dynamically after it. Keep host code
+  erasable-syntax only (no enums, no parameter properties).
+- **Children find the bundle's `node` and `mirror`.** The host prepends a
+  bin directory of shims to its PATH (`packages/host/src/runtimeBin.ts`);
+  never rely on the machine's PATH for either, in development included.
+- **Paths from URLs go through `fileURLToPath`**, never `URL.pathname`:
+  "Mirror Desktop.app" has a space.
 - **The protocol is the contract.** Every message is validated with the
   schemas in `packages/protocol` on both sides. A new capability starts with
   its schema and its test, then the host, then the UI.

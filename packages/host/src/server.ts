@@ -31,6 +31,7 @@ import {
 import { newId } from "mirror-mind/ts/src/index.ts";
 import { WebSocket, WebSocketServer } from "ws";
 
+import { materializeRuntimeBin } from "./runtimeBin.ts";
 import { SessionBusyError, SessionNotFoundError, SessionOpenError, SessionRegistry } from "./sessions.ts";
 
 const MIRROR_PACKAGE_JSON = new URL(import.meta.resolve("mirror-mind/package.json"));
@@ -46,6 +47,8 @@ if (!TOKEN) {
 
 const startedAt = Date.now();
 const instanceId = newId();
+const runtimeBin = materializeRuntimeBin();
+process.stderr.write(`mirror-host: runtime ${process.execPath} · bin ${runtimeBin}\n`);
 const sessions = new SessionRegistry();
 const authenticatedSockets = new Set<WebSocket>();
 
@@ -174,3 +177,11 @@ function shutdown(): void {
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, shutdown);
 }
+
+// The shell holds the other end of stdin for as long as it lives. When it
+// dies — cleanly or not — the pipe closes, and a host nobody can reach must
+// not outlive it: an orphaned host keeps sessions and the Mirror database
+// open with no window to show for them.
+process.stdin.on("end", shutdown);
+process.stdin.on("error", shutdown);
+process.stdin.resume();

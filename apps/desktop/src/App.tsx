@@ -37,17 +37,30 @@ export function App() {
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // StrictMode mounts twice in development. A connection that resolves
+    // after its effect was cleaned up must close itself, or two clients stay
+    // attached and every delta renders twice (seen as `**4**4****`).
+    let cancelled = false;
     let active: HostClient | null = null;
     void hostEndpoint()
       .then((endpoint) => HostClient.connect(endpoint))
       .then(({ client: connected, host: identity }) => {
+        if (cancelled) {
+          connected.close();
+          return;
+        }
         active = connected;
         connected.onEvent = applyEvent;
         setClient(connected);
         setHost(identity);
       })
-      .catch((error: unknown) => toast.error(error instanceof Error ? error.message : String(error)));
-    return () => active?.close();
+      .catch((error: unknown) => {
+        if (!cancelled) toast.error(error instanceof Error ? error.message : String(error));
+      });
+    return () => {
+      cancelled = true;
+      active?.close();
+    };
   }, []);
 
   useEffect(() => {

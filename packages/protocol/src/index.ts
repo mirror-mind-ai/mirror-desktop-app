@@ -110,6 +110,8 @@ export const SessionOpenResult = z.object({
   cwd: z.string().min(1),
   model: ModelRef.optional(),
   thinkingLevel: z.string(),
+  /** Resources that failed to load for this session, one line each; empty when all loaded. */
+  diagnostics: z.array(z.string()),
 });
 
 export const SessionPromptResult = z.object({
