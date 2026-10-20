@@ -4,7 +4,8 @@ Mirror Desktop is the first-party desktop application for Mirror Mind. This
 repository is its second body: a clean successor to
 `mirror-mind-ai/mirror-desktop` (see
 [docs/project/history/predecessor.md](docs/project/history/predecessor.md)).
-The founding design is
+Read [docs/index.md](docs/index.md) first: briefing, decisions, the Ariad
+roadmap. The founding design is
 [docs/project/explorations/reinvention-proposal.md](docs/project/explorations/reinvention-proposal.md).
 
 ## Shape
@@ -84,5 +85,8 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
 - **Small commits that explain why.** Commit the coherent changes of each
   turn before reporting completion. Never commit secrets, `.env` files,
   dependencies, build outputs or the Node sidecar binaries.
-- **Mirror journey:** `mirror-desktop`. Builder Mode activation is context
-  setup only; implementation starts on explicit instruction.
+- **Mirror journey:** `mirror-desktop`, governed by Ariad. Builder Mode
+  activation is context setup only; implementation starts on explicit
+  instruction, through the Ariad lifecycle. Keep `docs/project/decisions.md`,
+  the roadmap and `docs/process/worklog.md` in the same commit as the change
+  they describe.

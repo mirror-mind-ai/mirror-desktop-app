@@ -5,11 +5,11 @@ a place to operate Journey-bound Pi and Mirror conversations with native capabil
 built with Tauri 2, React and a Node host that embeds Pi and the Mirror core as libraries.
 
 This repository is the successor to
-[`mirror-mind-ai/mirror-desktop`](https://github.com/mirror-mind-ai/mirror-desktop);
-the lineage and the transition plan are in
-[docs/project/history/predecessor.md](docs/project/history/predecessor.md), and the
-design direction in
-[docs/project/explorations/reinvention-proposal.md](docs/project/explorations/reinvention-proposal.md).
+[`mirror-mind-ai/mirror-desktop`](https://github.com/mirror-mind-ai/mirror-desktop).
+Start at the [documentation map](docs/index.md): the
+[briefing](docs/project/briefing.md), the [decisions](docs/project/decisions.md),
+the [roadmap](docs/project/roadmap/index.md) and the
+[lineage](docs/project/history/predecessor.md).
 
 ## Layout
 
