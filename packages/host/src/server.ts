@@ -31,6 +31,13 @@ import {
 import { newId } from "mirror-mind/ts/src/index.ts";
 import { WebSocket, WebSocketServer } from "ws";
 
+import {
+  AuthBroker,
+  AuthFailedError,
+  AuthInProgressError,
+  AuthPromptNotFoundError,
+  AuthProviderNotFoundError,
+} from "./auth.ts";
 import { materializeRuntimeBin } from "./runtimeBin.ts";
 import { SessionBusyError, SessionNotFoundError, SessionOpenError, SessionRegistry } from "./sessions.ts";
 
@@ -49,7 +56,6 @@ const startedAt = Date.now();
 const instanceId = newId();
 const runtimeBin = materializeRuntimeBin();
 process.stderr.write(`mirror-host: runtime ${process.execPath} · bin ${runtimeBin}\n`);
-const sessions = new SessionRegistry();
 const authenticatedSockets = new Set<WebSocket>();
 
 function error(code: HostError["code"], message: string): HostError {
@@ -60,9 +66,13 @@ function send(socket: WebSocket, message: HostMessage): void {
   if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
 }
 
-sessions.subscribe((event) => {
+function broadcast(event: HostMessage): void {
   for (const socket of authenticatedSockets) send(socket, event);
-});
+}
+
+const auth = await AuthBroker.create(broadcast);
+const sessions = new SessionRegistry(auth.modelRuntime);
+sessions.subscribe(broadcast);
 
 async function handle(
   request: ClientRequest["request"],
@@ -104,6 +114,22 @@ async function handle(
       case "session.close":
         await sessions.close(request.sessionId);
         return { type: "session.close", sessionId: request.sessionId };
+      case "auth.providers":
+        return { type: "auth.providers", providers: auth.providers() };
+      case "auth.login":
+        await auth.login(request.providerId, request.authType);
+        return { type: "auth.login", providerId: request.providerId, authType: request.authType };
+      case "auth.answer":
+        auth.answer(request.promptId, request.value);
+        return { type: "auth.answer", promptId: request.promptId };
+      case "auth.cancel":
+        auth.cancel(request.providerId);
+        return { type: "auth.cancel", providerId: request.providerId };
+      case "auth.logout":
+        await auth.logout(request.providerId);
+        return { type: "auth.logout", providerId: request.providerId };
+      case "models.available":
+        return { type: "models.available", models: await auth.available() };
     }
   } catch (cause) {
     return failureOf(cause);
@@ -115,6 +141,10 @@ function failureOf(cause: unknown): HostError {
   if (cause instanceof SessionNotFoundError) return error("session_not_found", cause.message);
   if (cause instanceof SessionBusyError) return error("session_busy", cause.message);
   if (cause instanceof SessionOpenError) return error("session_open_failed", cause.message);
+  if (cause instanceof AuthProviderNotFoundError) return error("auth_provider_not_found", cause.message);
+  if (cause instanceof AuthInProgressError) return error("auth_in_progress", cause.message);
+  if (cause instanceof AuthPromptNotFoundError) return error("auth_prompt_not_found", cause.message);
+  if (cause instanceof AuthFailedError) return error("auth_failed", cause.message);
   process.stderr.write(`mirror-host: ${cause instanceof Error ? (cause.stack ?? cause.message) : String(cause)}\n`);
   return error("internal_failure", "The host could not complete the request.");
 }

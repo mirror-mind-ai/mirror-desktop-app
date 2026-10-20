@@ -14,7 +14,7 @@
 import { z } from "zod";
 
 /** Bumped on any breaking change to the schemas below. */
-export const PROTOCOL_VERSION = "0.2.0";
+export const PROTOCOL_VERSION = "0.3.0";
 
 // --- Client → host --------------------------------------------------------
 
@@ -61,6 +61,51 @@ export const SessionCloseRequest = z.object({
   sessionId: z.string().min(1),
 });
 
+// --- Provider authentication ---------------------------------------------
+//
+// Pi owns the flows (OAuth with a loopback callback, device codes, API keys)
+// and the credential store (`~/.pi/agent/auth.json`, shared with terminal
+// Pi). The host runs a flow and bridges its two needs to the UI: things to
+// show (`auth.event`) and questions to answer (`auth.prompt` → `auth.answer`).
+
+export const AuthType = z.enum(["oauth", "api_key"]);
+
+/** The providers Pi knows, with whether and how each is signed in. */
+export const AuthProvidersRequest = z.object({
+  type: z.literal("auth.providers"),
+});
+
+/** Start a sign-in flow. The response arrives when the flow ends, either way. */
+export const AuthLoginRequest = z.object({
+  type: z.literal("auth.login"),
+  providerId: z.string().min(1),
+  authType: AuthType,
+});
+
+/** Answer a question the flow asked through an `auth.prompt` event. */
+export const AuthAnswerRequest = z.object({
+  type: z.literal("auth.answer"),
+  promptId: z.string().min(1),
+  value: z.string(),
+});
+
+/** Abandon the provider's running flow; its `auth.login` then fails as cancelled. */
+export const AuthCancelRequest = z.object({
+  type: z.literal("auth.cancel"),
+  providerId: z.string().min(1),
+});
+
+/** Forget the stored credential of a provider. */
+export const AuthLogoutRequest = z.object({
+  type: z.literal("auth.logout"),
+  providerId: z.string().min(1),
+});
+
+/** Models a request can be sent to right now, given the credentials in place. */
+export const ModelsAvailableRequest = z.object({
+  type: z.literal("models.available"),
+});
+
 export const ClientRequestBody = z.discriminatedUnion("type", [
   HelloRequest,
   PingRequest,
@@ -68,6 +113,12 @@ export const ClientRequestBody = z.discriminatedUnion("type", [
   SessionPromptRequest,
   SessionAbortRequest,
   SessionCloseRequest,
+  AuthProvidersRequest,
+  AuthLoginRequest,
+  AuthAnswerRequest,
+  AuthCancelRequest,
+  AuthLogoutRequest,
+  ModelsAvailableRequest,
 ]);
 
 export const ClientRequest = z.object({
@@ -129,6 +180,54 @@ export const SessionCloseResult = z.object({
   sessionId: z.string().min(1),
 });
 
+export const AuthProvider = z.object({
+  id: z.string(),
+  name: z.string(),
+  /** How this provider can be signed into; a provider may offer both. */
+  oauth: z
+    .object({
+      label: z.string(),
+      /** Backed by a consumer subscription (Claude Pro/Max, ChatGPT Plus/Pro) rather than pay-per-use. */
+      subscription: z.boolean(),
+    })
+    .optional(),
+  apiKey: z.object({ label: z.string() }).optional(),
+  /** Present when a credential is in place, with where it came from. */
+  signedIn: z
+    .object({
+      authType: AuthType,
+      source: z.string().optional(),
+    })
+    .optional(),
+});
+
+export const AuthProvidersResult = z.object({
+  type: z.literal("auth.providers"),
+  providers: z.array(AuthProvider),
+});
+
+export const AuthLoginResult = z.object({
+  type: z.literal("auth.login"),
+  providerId: z.string(),
+  authType: AuthType,
+});
+
+export const AuthAnswerResult = z.object({ type: z.literal("auth.answer"), promptId: z.string() });
+export const AuthCancelResult = z.object({ type: z.literal("auth.cancel"), providerId: z.string() });
+export const AuthLogoutResult = z.object({ type: z.literal("auth.logout"), providerId: z.string() });
+
+export const AvailableModel = z.object({
+  provider: z.string(),
+  id: z.string(),
+  name: z.string(),
+  reasoning: z.boolean(),
+});
+
+export const ModelsAvailableResult = z.object({
+  type: z.literal("models.available"),
+  models: z.array(AvailableModel),
+});
+
 export const HostResultBody = z.discriminatedUnion("type", [
   HelloResult,
   PingResult,
@@ -136,6 +235,12 @@ export const HostResultBody = z.discriminatedUnion("type", [
   SessionPromptResult,
   SessionAbortResult,
   SessionCloseResult,
+  AuthProvidersResult,
+  AuthLoginResult,
+  AuthAnswerResult,
+  AuthCancelResult,
+  AuthLogoutResult,
+  ModelsAvailableResult,
 ]);
 
 /** Named, bounded failure. Never carries raw exceptions, paths or secrets. */
@@ -147,6 +252,10 @@ export const HostError = z.object({
     "session_not_found",
     "session_open_failed",
     "session_busy",
+    "auth_provider_not_found",
+    "auth_in_progress",
+    "auth_prompt_not_found",
+    "auth_failed",
     "internal_failure",
   ]),
   message: z.string(),
@@ -207,6 +316,38 @@ export const SessionEvent = z.discriminatedUnion("type", [
   }),
 ]);
 
+/** What a sign-in flow wants shown. Mirrors Pi's `AuthEvent`. */
+export const AuthFlowEvent = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("info"),
+    message: z.string(),
+    links: z.array(z.object({ url: z.string(), label: z.string().optional() })).optional(),
+  }),
+  /** Open this in the system browser; the flow is listening for the callback. */
+  z.object({ type: z.literal("auth_url"), url: z.string(), instructions: z.string().optional() }),
+  z.object({
+    type: z.literal("device_code"),
+    userCode: z.string(),
+    verificationUri: z.string(),
+    intervalSeconds: z.number().optional(),
+    expiresInSeconds: z.number().optional(),
+  }),
+  z.object({ type: z.literal("progress"), message: z.string() }),
+]);
+
+/** A question a sign-in flow asks. Mirrors Pi's `AuthPrompt`, minus its abort signal. */
+export const AuthFlowPrompt = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("text"), message: z.string(), placeholder: z.string().optional() }),
+  z.object({ type: z.literal("secret"), message: z.string(), placeholder: z.string().optional() }),
+  z.object({
+    type: z.literal("select"),
+    message: z.string(),
+    options: z.array(z.object({ id: z.string(), label: z.string(), description: z.string().optional() })),
+  }),
+  /** The callback may still arrive on its own; the prompt is closed by `auth.prompt_closed` when it does. */
+  z.object({ type: z.literal("manual_code"), message: z.string(), placeholder: z.string().optional() }),
+]);
+
 /** Session activity the host pushes without being asked. */
 export const HostEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("host.ready") }),
@@ -225,6 +366,10 @@ export const HostEvent = z.discriminatedUnion("type", [
     event: z.string(),
     message: z.string(),
   }),
+  z.object({ type: z.literal("auth.event"), providerId: z.string(), event: AuthFlowEvent }),
+  z.object({ type: z.literal("auth.prompt"), providerId: z.string(), promptId: z.string(), prompt: AuthFlowPrompt }),
+  /** The flow no longer needs this answer (the browser callback arrived, or the flow ended). */
+  z.object({ type: z.literal("auth.prompt_closed"), promptId: z.string() }),
 ]);
 
 /** Anything the host writes to the socket. */
@@ -245,5 +390,10 @@ export type HostResultBody = z.infer<typeof HostResultBody>;
 export type HostError = z.infer<typeof HostError>;
 export type HostResponse = z.infer<typeof HostResponse>;
 export type SessionEvent = z.infer<typeof SessionEvent>;
+export type AuthType = z.infer<typeof AuthType>;
+export type AuthProvider = z.infer<typeof AuthProvider>;
+export type AvailableModel = z.infer<typeof AvailableModel>;
+export type AuthFlowEvent = z.infer<typeof AuthFlowEvent>;
+export type AuthFlowPrompt = z.infer<typeof AuthFlowPrompt>;
 export type HostEvent = z.infer<typeof HostEvent>;
 export type HostMessage = z.infer<typeof HostMessage>;

@@ -70,11 +70,12 @@ bulk). DMG 67 MiB.
    when the shell dies abruptly, and the orphan kept sessions and the
    database open. The host now holds a stdin pipe from the shell and shuts
    down on its EOF.
-3. **The bundle identifier `ai.mirrormind.desktop.app` ends with `.app`.**
-   Tauri warns, and the reason is real: the app-data directory
+3. **A bundle identifier ending in `.app` is a mistake.** The first
+   development identifier was `ai.mirrormind.desktop.app`; Tauri warns, and
+   the reason is real: the app-data directory
    `~/Library/Application Support/ai.mirrormind.desktop.app` is shown by
-   Finder as an application bundle. Worth changing before any user data
-   lives under it.
+   Finder as an application bundle. Changed to `ai.mirrormind.mirror-desktop`
+   before any user data lived under it.
 4. **Project-level Pi packages apply to the host's sessions.** A `.pi/settings.json`
    in a Journey directory (the `mirror` Journey lists the global
    `mirror-mind`) loads for sessions opened there, exactly as in terminal

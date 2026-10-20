@@ -1,9 +1,10 @@
 import type { HostEvent, HostIdentity, SessionEvent } from "@mirror-desktop/protocol";
-import { Loader2, Send, Sparkles, Square } from "lucide-react";
+import { KeyRound, Loader2, Send, Sparkles, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
 
 import { HostClient, hostEndpoint } from "./host/client.ts";
+import { SignIn } from "./SignIn.tsx";
 
 /**
  * The spike console: the thinnest screen that exercises the whole path —
@@ -28,6 +29,9 @@ interface Session {
 export function App() {
   const [host, setHost] = useState<HostIdentity | null>(null);
   const [client, setClient] = useState<HostClient | null>(null);
+  /** Whether any model can be used; null until the host answered. */
+  const [canUseModels, setCanUseModels] = useState<boolean | null>(null);
+  const [showProviders, setShowProviders] = useState(false);
   const [cwd, setCwd] = useState("/Users/vinicius/dev/workspace/mirror-desktop-app");
   const [session, setSession] = useState<Session | null>(null);
   const [opening, setOpening] = useState(false);
@@ -53,6 +57,10 @@ export function App() {
         connected.onEvent = applyEvent;
         setClient(connected);
         setHost(identity);
+        return connected.request({ type: "models.available" });
+      })
+      .then((result) => {
+        if (result && result.type === "models.available") setCanUseModels(result.models.length > 0);
       })
       .catch((error: unknown) => {
         if (!cancelled) toast.error(error instanceof Error ? error.message : String(error));
@@ -124,9 +132,28 @@ export function App() {
         <span className="font-mono text-xs text-muted-foreground">
           {host ? `host · node ${host.node} · pi ${host.pi} · mirror ${host.mirror}` : "connecting to host…"}
         </span>
+        <span className="flex-1" />
+        {client && canUseModels !== null ? (
+          <button
+            type="button"
+            onClick={() => setShowProviders((value) => !value)}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <KeyRound className="size-3.5" aria-hidden="true" /> Providers
+          </button>
+        ) : null}
       </header>
 
-      {!session ? (
+      {client && canUseModels !== null && (showProviders || !canUseModels) ? (
+        <SignIn
+          client={client}
+          onSignedIn={() => {
+            setCanUseModels(true);
+            setShowProviders(false);
+          }}
+          {...(canUseModels ? { onDismiss: () => setShowProviders(false) } : {})}
+        />
+      ) : !session ? (
         <section className="flex flex-1 items-center justify-center p-8">
           <form
             className="flex w-full max-w-xl flex-col gap-3 rounded-2xl border border-border bg-card p-6"

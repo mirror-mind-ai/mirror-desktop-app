@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node src/main.ts",
     "typecheck": "tsc --noEmit",
-    "turn": "node scripts/turn.ts"
+    "turn": "node scripts/turn.ts",
+    "login": "node scripts/login.ts"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.3.0",

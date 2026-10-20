@@ -20,6 +20,7 @@ import {
   createAgentSession,
   DefaultResourceLoader,
   getAgentDir,
+  type ModelRuntime,
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
@@ -60,6 +61,12 @@ export class SessionBusyError extends Error {
 export class SessionRegistry {
   readonly #sessions = new Map<string, OpenSession>();
   readonly #listeners = new Set<HostEventListener>();
+  readonly #modelRuntime: ModelRuntime;
+
+  /** One model runtime for every session: a sign-in applies to the next turn, no restart. */
+  constructor(modelRuntime: ModelRuntime) {
+    this.#modelRuntime = modelRuntime;
+  }
 
   /** Receive every event of every session; returns the unsubscribe function. */
   subscribe(listener: HostEventListener): () => void {
@@ -83,6 +90,7 @@ export class SessionRegistry {
       const created = await createAgentSession({
         cwd,
         agentDir,
+        modelRuntime: this.#modelRuntime,
         settingsManager,
         resourceLoader,
         sessionManager: SessionManager.create(cwd),

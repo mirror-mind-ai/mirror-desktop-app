@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ClientRequest, HostMessage, HostResponse, PROTOCOL_VERSION } from "./index.ts";
+import { ClientRequest, HostEvent, HostMessage, HostResponse, PROTOCOL_VERSION } from "./index.ts";
 
 describe("protocol", () => {
   it("accepts a hello request and its response round-trip", () => {
@@ -75,5 +75,53 @@ describe("session protocol", () => {
     for (const code of ["session_not_found", "session_open_failed", "session_busy"]) {
       expect(HostResponse.parse({ id: "r", error: { code, message: "…" } }).error?.code).toBe(code);
     }
+  });
+});
+
+describe("auth protocol", () => {
+  it("carries a sign-in flow: a prompt to answer, events to show, and the answer", () => {
+    const prompt = HostEvent.parse({
+      type: "auth.prompt",
+      providerId: "anthropic",
+      promptId: "p1",
+      prompt: { type: "select", message: "How?", options: [{ id: "browser", label: "Browser" }] },
+    });
+    expect(prompt.type).toBe("auth.prompt");
+    const url = HostEvent.parse({
+      type: "auth.event",
+      providerId: "anthropic",
+      event: { type: "auth_url", url: "https://claude.ai/oauth/authorize?x=1", instructions: "Finish in the browser." },
+    });
+    expect(url.type).toBe("auth.event");
+    expect(ClientRequest.parse({ id: "r", request: { type: "auth.answer", promptId: "p1", value: "browser" } }).request.type).toBe(
+      "auth.answer",
+    );
+    expect(HostEvent.parse({ type: "auth.prompt_closed", promptId: "p1" }).type).toBe("auth.prompt_closed");
+  });
+
+  it("describes a provider by its sign-in methods and current state", () => {
+    const result = HostResponse.parse({
+      id: "r",
+      result: {
+        type: "auth.providers",
+        providers: [
+          {
+            id: "anthropic",
+            name: "Anthropic",
+            oauth: { label: "Anthropic (Claude Pro/Max)", subscription: true },
+            apiKey: { label: "Anthropic API key" },
+            signedIn: { authType: "oauth", source: "OAuth" },
+          },
+          { id: "openai", name: "OpenAI", apiKey: { label: "OpenAI API key" } },
+        ],
+      },
+    });
+    expect(result.result?.type).toBe("auth.providers");
+  });
+
+  it("rejects an unknown auth type", () => {
+    expect(() =>
+      ClientRequest.parse({ id: "r", request: { type: "auth.login", providerId: "anthropic", authType: "password" } }),
+    ).toThrow();
   });
 });

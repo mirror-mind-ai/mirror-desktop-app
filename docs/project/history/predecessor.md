@@ -56,7 +56,7 @@ PATH discovery, the Tactical and Strategic altitudes, the Ariad observatory.
 | | first body | second body |
 |---|---|---|
 | repository | `mirror-mind-ai/mirror-desktop` | `mirror-mind-ai/mirror-desktop-app` |
-| bundle identifier | `ai.mirrormind.desktop` (stable), `.dev`, `.eval` | `ai.mirrormind.desktop.app` |
+| bundle identifier | `ai.mirrormind.desktop` (stable), `.dev`, `.eval` | `ai.mirrormind.mirror-desktop` |
 | update channel | `updates.mirrormind.sh/mirror-desktop/alpha/…` | none yet |
 | dev server port | 1420 | 1421 |
 
