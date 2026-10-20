@@ -40,3 +40,40 @@ describe("protocol", () => {
     expect("error" in parsed && parsed.error?.code).toBe("unauthorized");
   });
 });
+
+describe("session protocol", () => {
+  it("accepts the open/prompt/abort/close requests", () => {
+    for (const request of [
+      { type: "session.open", cwd: "/tmp/journey" },
+      { type: "session.prompt", sessionId: "s1", text: "hello" },
+      { type: "session.abort", sessionId: "s1" },
+      { type: "session.close", sessionId: "s1" },
+    ]) {
+      expect(ClientRequest.parse({ id: "r", request }).request.type).toBe(request.type);
+    }
+  });
+
+  it("rejects an empty prompt and an open without a working directory", () => {
+    expect(() => ClientRequest.parse({ id: "r", request: { type: "session.prompt", sessionId: "s1", text: "" } })).toThrow();
+    expect(() => ClientRequest.parse({ id: "r", request: { type: "session.open" } })).toThrow();
+  });
+
+  it("forwards only the projected session events", () => {
+    const envelope = (event: unknown) => ({ type: "session.event", sessionId: "s1", at: 1, event });
+    expect(HostMessage.parse(envelope({ type: "text_delta", delta: "po" }))).toMatchObject({ type: "session.event" });
+    expect(HostMessage.parse(envelope({ type: "agent_settled", aborted: false }))).toMatchObject({ type: "session.event" });
+    expect(
+      HostMessage.parse(
+        envelope({ type: "tool_end", toolCallId: "c1", toolName: "bash", isError: false, durationMs: 12, resultText: "ok" }),
+      ),
+    ).toMatchObject({ type: "session.event" });
+    // An event Pi emits that nobody wrote down is not part of the contract.
+    expect(() => HostMessage.parse(envelope({ type: "turn_start" }))).toThrow();
+  });
+
+  it("names the session failures the UI can act on", () => {
+    for (const code of ["session_not_found", "session_open_failed", "session_busy"]) {
+      expect(HostResponse.parse({ id: "r", error: { code, message: "…" } }).error?.code).toBe(code);
+    }
+  });
+});

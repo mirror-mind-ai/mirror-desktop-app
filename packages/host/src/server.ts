@@ -6,9 +6,8 @@
 // path crosses Rust: the shell starts the host, hands it a per-launch token,
 // reads the port the host chose, and gives both to the webview.
 //
-// This file is the scaffold: it proves that Pi and the Mirror core load in one
-// process, authenticates connections, and answers `hello` and `ping`. Sessions,
-// journeys and events arrive with the spikes that follow.
+// Requests are answered one by one per connection; session events are fanned
+// out to every authenticated connection as they leave Pi (see sessions.ts).
 //
 // Runs with no build step: Node 24 strips types from `.ts` files directly,
 // the same way the Mirror core runs.
@@ -32,6 +31,8 @@ import {
 import { newId } from "mirror-mind/ts/src/index.ts";
 import { WebSocket, WebSocketServer } from "ws";
 
+import { SessionBusyError, SessionNotFoundError, SessionOpenError, SessionRegistry } from "./sessions.ts";
+
 const MIRROR_PACKAGE_JSON = new URL(import.meta.resolve("mirror-mind/package.json"));
 const MIRROR_VERSION = (JSON.parse(readFileSync(MIRROR_PACKAGE_JSON, "utf8")) as { version: string })
   .version;
@@ -45,39 +46,74 @@ if (!TOKEN) {
 
 const startedAt = Date.now();
 const instanceId = newId();
+const sessions = new SessionRegistry();
+const authenticatedSockets = new Set<WebSocket>();
 
 function error(code: HostError["code"], message: string): HostError {
   return { code, message };
 }
 
 function send(socket: WebSocket, message: HostMessage): void {
-  socket.send(JSON.stringify(message));
+  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
 }
 
-function handle(request: ClientRequest["request"], authenticated: boolean): HostResultBody | HostError {
-  switch (request.type) {
-    case "hello":
-      if (request.token !== TOKEN) return error("unauthorized", "The host did not recognize this token.");
-      if (request.protocolVersion !== PROTOCOL_VERSION) {
-        return error(
-          "unsupported_protocol_version",
-          `The host speaks protocol ${PROTOCOL_VERSION}; the client asked for ${request.protocolVersion}.`,
-        );
-      }
-      return {
-        type: "hello",
-        host: {
-          instanceId,
-          protocolVersion: PROTOCOL_VERSION,
-          node: process.version,
-          pi: PI_VERSION,
-          mirror: MIRROR_VERSION,
-        },
-      };
-    case "ping":
-      if (!authenticated) return error("unauthorized", "Say hello first.");
-      return { type: "ping", uptimeMs: Date.now() - startedAt };
+sessions.subscribe((event) => {
+  for (const socket of authenticatedSockets) send(socket, event);
+});
+
+async function handle(
+  request: ClientRequest["request"],
+  authenticated: boolean,
+): Promise<HostResultBody | HostError> {
+  if (request.type === "hello") {
+    if (request.token !== TOKEN) return error("unauthorized", "The host did not recognize this token.");
+    if (request.protocolVersion !== PROTOCOL_VERSION) {
+      return error(
+        "unsupported_protocol_version",
+        `The host speaks protocol ${PROTOCOL_VERSION}; the client asked for ${request.protocolVersion}.`,
+      );
+    }
+    return {
+      type: "hello",
+      host: {
+        instanceId,
+        protocolVersion: PROTOCOL_VERSION,
+        node: process.version,
+        pi: PI_VERSION,
+        mirror: MIRROR_VERSION,
+      },
+    };
   }
+  if (!authenticated) return error("unauthorized", "Say hello first.");
+
+  try {
+    switch (request.type) {
+      case "ping":
+        return { type: "ping", uptimeMs: Date.now() - startedAt };
+      case "session.open":
+        return await sessions.open(request.cwd);
+      case "session.prompt":
+        sessions.prompt(request.sessionId, request.text);
+        return { type: "session.prompt", sessionId: request.sessionId };
+      case "session.abort":
+        await sessions.abort(request.sessionId);
+        return { type: "session.abort", sessionId: request.sessionId };
+      case "session.close":
+        await sessions.close(request.sessionId);
+        return { type: "session.close", sessionId: request.sessionId };
+    }
+  } catch (cause) {
+    return failureOf(cause);
+  }
+}
+
+/** Typed session failures become named protocol errors; anything else is an internal failure without its details. */
+function failureOf(cause: unknown): HostError {
+  if (cause instanceof SessionNotFoundError) return error("session_not_found", cause.message);
+  if (cause instanceof SessionBusyError) return error("session_busy", cause.message);
+  if (cause instanceof SessionOpenError) return error("session_open_failed", cause.message);
+  process.stderr.write(`mirror-host: ${cause instanceof Error ? (cause.stack ?? cause.message) : String(cause)}\n`);
+  return error("internal_failure", "The host could not complete the request.");
 }
 
 const httpServer = createServer();
@@ -92,15 +128,20 @@ server.on("connection", (socket) => {
       return;
     }
     const { id, request } = parsed.data;
-    const outcome = handle(request, authenticated);
-    if ("code" in outcome) {
-      send(socket, { id, error: outcome });
-      if (outcome.code === "unauthorized") socket.close(4401, "unauthorized");
-      return;
-    }
-    if (outcome.type === "hello") authenticated = true;
-    send(socket, { id, result: outcome });
+    void handle(request, authenticated).then((outcome) => {
+      if ("code" in outcome) {
+        send(socket, { id, error: outcome });
+        if (outcome.code === "unauthorized") socket.close(4401, "unauthorized");
+        return;
+      }
+      if (outcome.type === "hello") {
+        authenticated = true;
+        authenticatedSockets.add(socket);
+      }
+      send(socket, { id, result: outcome });
+    });
   });
+  socket.on("close", () => authenticatedSockets.delete(socket));
 });
 
 function safeJson(text: string): unknown {
@@ -119,9 +160,17 @@ httpServer.listen(0, "127.0.0.1", () => {
   process.stdout.write(`${JSON.stringify({ event: "listening", port, protocolVersion: PROTOCOL_VERSION })}\n`);
 });
 
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => {
+// Sessions close first so every extension sees `session_shutdown` before the
+// process goes; a close that hangs is cut short after a bound, never waited on.
+function shutdown(): void {
+  const closing = sessions.closeAll();
+  const bound = new Promise<void>((resolve) => setTimeout(resolve, 10_000));
+  void Promise.race([closing, bound]).then(() => {
     server.close();
     httpServer.close(() => process.exit(0));
   });
+}
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, shutdown);
 }

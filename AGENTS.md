@@ -31,6 +31,7 @@ npm test                         # vitest, tests beside the code (*.test.ts)
 npm run build                    # tsc + vite build of the UI
 npm run dev                      # tauri dev (Vite on port 1421)
 MIRROR_HOST_TOKEN=x npm run host # run the host alone; prints {"event":"listening",...}
+npm run turn --workspace packages/host -- --cwd <dir> --prompt "…"   # one measured turn through the host
 cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
 ```
 
