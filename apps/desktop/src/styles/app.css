@@ -1,6 +1,15 @@
 @import "tailwindcss";
 
 /*
+ * Tailwind reads every file under the app for class names, tests and fixtures
+ * included, and a word like `hidden` or `table` in a test would become a rule in
+ * the shipped stylesheet. Test sources never shape production CSS.
+ */
+@source not "../testing";
+@source not "../**/*.test.ts";
+@source not "../**/*.test.tsx";
+
+/*
  * Theme tokens. The app themes by ROOT CLASS (`.dark` / `.light` on <html>),
  * never by the OS media query alone, so "system" resolves to a class and every
  * `dark:` variant follows the app's choice. The curated palettes of the
