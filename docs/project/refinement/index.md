@@ -29,6 +29,7 @@ or executes work.
 
 | Order | ID | Story | Status |
 |------:|----|-------|--------|
+| 1 | [RS001](rs001-host-ui-contract/index.md) | Host–UI Contract | proposed |
 
 ## Change Requests
 
@@ -36,6 +37,7 @@ Open work is ordered intentionally. Terminal history follows open work.
 
 | Order | ID | RS | Change | Status | Driver | Delivery |
 |------:|----|----|--------|--------|--------|----------|
+| 1 | [CR001](rs001-host-ui-contract/cr001-a-message-that-breaks-the-protocol-is-dropped-silently.md) | RS001 | A message that breaks the protocol is dropped silently, and the request behind it never settles | captured | — | — |
 
 ## Status Vocabulary
 
