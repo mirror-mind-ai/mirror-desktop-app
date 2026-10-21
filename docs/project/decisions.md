@@ -140,3 +140,23 @@ Adopted after the four spikes, deliberately not before: a spike is a
 question, not a story. From here, work is pulled through the Ariad
 lifecycle; the spikes stand as CV0, done, and their findings as decisions
 above and prerequisites in the ledger.
+
+## D13 — UI tests run against a fake host at the UI's two doors
+
+**Date:** 2026-10-21 · **Story:** [CV1.DS1.TS1](roadmap/cv1-daily-use/cv1-ds1-the-conversation-shell/cv1-ds1-ts1-fake-host-and-ui-test-harness/index.md)
+
+The UI reaches the host through exactly two doors: the `host_endpoint` Tauri
+command, and a WebSocket to the port it returns. UI tests replace those two
+doors and nothing else, so `App` and `HostClient` run unchanged against a fake
+host that follows the real one: the handshake, fan-out to every connection,
+and the protocol checked both ways (D3).
+
+The harness denies by default. A request, a socket, a network call or a Tauri
+command nobody scripted is recorded and fails the test at teardown, because
+the UI turns thrown errors into toasts.
+
+The test environment follows the workspace: every desktop test runs in
+happy-dom, with script evaluation and resource loading off, and packages run
+in node. Fixtures are invented, never copied from a real session, and Tailwind
+does not scan test sources, so tests never shape the shipped artifact. The
+conventions are in AGENTS.md.

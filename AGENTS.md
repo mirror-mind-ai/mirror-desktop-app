@@ -30,7 +30,8 @@ the turn hot path crosses Rust.**
 ```bash
 npm install                      # workspaces: protocol, host, desktop
 npm run typecheck                # tsc in every workspace
-npm test                         # vitest, tests beside the code (*.test.ts)
+npm test                         # vitest from the root: packages in node, every desktop test in happy-dom
+npx vitest run <path> --project desktop   # one desktop test; always from the root, never from apps/desktop
 npm run build                    # tsc + vite build of the UI
 npm run dev                      # tauri dev (Vite on port 1421)
 MIRROR_HOST_TOKEN=x npm run host # run the host alone; prints {"event":"listening",...}
@@ -82,6 +83,27 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
 - **TDD for behavior.** A feature or fix starts with a failing test; error
   paths carry the same burden as happy paths; `retry: 0`, a flaky test is
   fixed, never retried.
+- **UI tests run against the fake host** (`apps/desktop/src/testing/`, whose
+  modules say how each part works). Every desktop test runs in happy-dom with
+  no Pi, no model and no network.
+  - Compose the app through `renderApp()`, and script the world with
+    `serveFakeHost({ models, journeys, turns })`. Fixtures come from
+    `loadTurn()`, and a held turn is released step by step.
+  - Find elements by role, label or text, the way a person does; use
+    `data-testid` only where nothing accessible names the element. Act
+    through `userEvent.setup()`; wait with `findBy*`/`waitFor`, never a fixed
+    delay.
+  - Anything the harness forbids fails the test by name at teardown, even when
+    the UI swallowed the error: an unscripted request or Tauri command, a
+    socket or network call elsewhere, a turn never played, a `console.error`.
+    A failing test prints the fake host's traffic log after it.
+  - A new privileged Tauri call is scripted with `scriptIpc` and its arguments
+    are asserted.
+  - Fixtures and worlds are invented and inert: no real paths (only
+    `/Users/test/`), no real session or tool text, nothing shaped like a
+    secret. The loader refuses them. UI tests never enable script evaluation.
+  - Harness code lives only under `apps/desktop/src/testing/`, never in a
+    staged package. App code never imports it, and a test enforces that.
 - **TypeScript strict, no `any`;** casts only at SDK boundaries with a reason.
   Comments explain *why*. English in code, tests, docs and commits.
 - **Small commits that explain why.** Commit the coherent changes of each

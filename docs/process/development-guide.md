@@ -302,8 +302,6 @@ docs in the same commit as what they describe. Beyond them:
 Named so they are not assumed away:
 
 - **No CI.** No workflow runs on push; the local gate is the whole proof.
-- **No UI rendering tests.** Nothing renders a component under test until
-  CV1.DS1.TS1 brings the fake host and happy-dom.
 - **No Rust tests.** The shell is checked by `cargo check` only.
 - **No linter or formatter.** Style rests on review.
 - **No isolated real turn.** A real turn writes to the person's Mirror and

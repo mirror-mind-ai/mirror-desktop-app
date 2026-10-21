@@ -1,0 +1,15 @@
+[
+  { "type": "agent_start" },
+  { "type": "message_start", "role": "system" },
+  { "type": "message_end", "role": "system", "text": "Invented context for a test session." },
+  { "type": "message_start", "role": "user" },
+  { "type": "message_end", "role": "user", "text": "Hello" },
+  { "type": "message_start", "role": "assistant" },
+  { "type": "text_delta", "delta": "Tides " },
+  { "type": "text_delta", "delta": "turn slowly\n" },
+  { "type": "text_delta", "delta": "under " },
+  { "type": "text_delta", "delta": "lanterns." },
+  { "type": "message_end", "role": "assistant", "text": "Tides turn slowly\nunder lanterns.", "stopReason": "stop" },
+  { "type": "agent_end" },
+  { "type": "agent_settled", "aborted": false }
+]
