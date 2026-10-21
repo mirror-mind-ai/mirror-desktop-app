@@ -2,7 +2,7 @@
 
 ## Status
 
-Blocked
+Passed
 
 ## Automated Checks
 
@@ -20,7 +20,7 @@ Evidence: No production behavior changed: the built app is byte-identical to the
 
 Route: The four steps in the TS1 test guide: run npm test; make three deliberate violations (a swallowed fetch, a missing scripted turn, a broken fixture) and see each fail by name; check four statements about App.test.tsx; read the recorded evidence.
 
-Navigator accepted: no
+Navigator accepted: yes
 
 Expected observation: Both projects green; each violation fails naming what was attempted; App.test.tsx imports only the harness, Testing Library and protocol types, with no socket, port or token; the evidence records identity, committed state, red runs, determinism and the structure capture.
 
@@ -30,5 +30,5 @@ Fail condition: Any observation does not hold.
 
 ## Missing Evidence
 
-- Navigator validation has not been accepted
-<!-- ariad-seal sha256:57e37e32841a0742ded4f466df7b13904ba442362930ae77311fc5f07674ecea — Ariad wrote this file and rewrites it only while this line matches the text above it. Edit the file and Ariad will leave it as it is. -->
+- none
+<!-- ariad-seal sha256:55a1a2132d0e352fb4f791c199de83d5d5ef64ecdfe900c752d5476d71d3f0b5 — Ariad wrote this file and rewrites it only while this line matches the text above it. Edit the file and Ariad will leave it as it is. -->
