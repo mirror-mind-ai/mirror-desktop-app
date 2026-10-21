@@ -267,3 +267,147 @@ describe("the fake host's sessions", () => {
     );
   });
 });
+
+describe("the fake host's scripted failures", () => {
+  const notConfigured = { code: "mirror_not_configured", message: "No Mirror home is configured on this machine yet." } as const;
+
+  it("fails a scripted request with the real host's error until the test stops it, recording nothing", async () => {
+    const host = serveFakeHost(world({ failures: [{ request: "journeys.list", error: notConfigured }] }));
+    const { client } = await connected(host.endpoint);
+    const error = await client.request({ type: "journeys.list" }).catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(HostRequestError);
+    expect(error).toMatchObject({ code: "mirror_not_configured", message: notConfigured.message });
+    await expect(client.request({ type: "journeys.list" })).rejects.toThrow(notConfigured.message);
+
+    host.stopFailing("journeys.list");
+    await expect(client.request({ type: "journeys.list" })).resolves.toMatchObject({ type: "journeys.list" });
+    expect(take()).toEqual([]);
+  });
+
+  it("refuses hello as scripted, closing with 4401 as the real host does for unauthorized", async () => {
+    const unauthorized = { code: "unauthorized", message: "The host did not recognize this token." } as const;
+    const host = serveFakeHost(world({ failures: [{ request: "hello", error: unauthorized }] }));
+    const raw = await rawSocket(urlOf(host.endpoint));
+    raw.send({ id: "1", request: { type: "hello", token: host.endpoint.token, protocolVersion: PROTOCOL_VERSION } });
+    await vi.waitFor(() => expect(raw.closes).toEqual([4401]));
+    expect(raw.received).toEqual([{ id: "1", error: unauthorized }]);
+
+    host.stopFailing("hello");
+    await expect(HostClient.connect(host.endpoint)).resolves.toMatchObject({ host: host.identity });
+    expect(take()).toEqual([]);
+  });
+
+  it("fails session.open for the scripted Journey only", async () => {
+    const failed = { code: "session_open_failed", message: "The project path does not exist." } as const;
+    const host = serveFakeHost(
+      world({
+        journeys: [...world().journeys, { id: "beds", name: "Beds", status: "active", description: "", projectPath: "/Users/test/beds" }],
+        failures: [{ request: "session.open", journey: "garden", error: failed }],
+      }),
+    );
+    const { client } = await connected(host.endpoint);
+    await expect(client.request({ type: "session.open", journey: "garden" })).rejects.toThrow(failed.message);
+    await expect(client.request({ type: "session.open", journey: "beds" })).resolves.toMatchObject({ sessionId: "session-1" });
+    host.stopFailing("session.open", "garden");
+    await expect(client.request({ type: "session.open", journey: "garden" })).resolves.toMatchObject({ sessionId: "session-2" });
+    expect(take()).toEqual([]);
+  });
+
+  it("records a scripted failure no request ever met, when the test ends", () => {
+    serveFakeHost(world({ failures: [{ request: "journeys.list", error: notConfigured }] }));
+    endFakeHosts();
+    expect(take()).toEqual([{ kind: "unscripted", detail: "the failure scripted for journeys.list was never answered" }]);
+  });
+
+  it("refuses to stop a failure that was never scripted", () => {
+    const host = serveFakeHost(world());
+    expect(() => host.stopFailing("journeys.list")).toThrow("No failure is scripted for journeys.list.");
+  });
+
+  it("refuses a failure that breaks the protocol, or names a Journey the world does not have", () => {
+    expect(() => serveFakeHost(world({ failures: [{ request: "journeys.list", error: { code: "nope", message: "" } as never }] }))).toThrow(
+      /^The fake host's world: failures\[0\]\.error\.code: /,
+    );
+    expect(() => serveFakeHost(world({ failures: [{ request: "session.open", journey: "nowhere", error: notConfigured }] }))).toThrow(
+      'The fake host\'s world: failures[0] fails session.open for "nowhere", a Journey the world does not have',
+    );
+  });
+});
+
+describe("the fake host's held opens", () => {
+  it("answers a held session.open only when the test releases it, and holds only the first", async () => {
+    const host = serveFakeHost(world({ heldOpens: ["garden"] }));
+    const { client } = await connected(host.endpoint);
+    let answered = false;
+    const first = client.request({ type: "session.open", journey: "garden" }).then((result) => {
+      answered = true;
+      return result;
+    });
+    await vi.waitFor(() => expect(host.requestsOf("session.open")).toHaveLength(1));
+    expect(answered).toBe(false);
+
+    host.heldOpen("garden").release();
+    await expect(first).resolves.toMatchObject({ sessionId: "session-1", journey: "garden" });
+    await expect(client.request({ type: "session.open", journey: "garden" })).resolves.toMatchObject({ sessionId: "session-2" });
+  });
+
+  it("refuses to release an open that is not held", () => {
+    const host = serveFakeHost(world({ heldOpens: ["garden"] }));
+    expect(() => host.heldOpen("garden")).toThrow("No session.open for garden is held: send in it first.");
+    endFakeHosts();
+    take();
+  });
+
+  it("records an open held and never released, or scripted to be held and never asked for", async () => {
+    const host = serveFakeHost(world({ heldOpens: ["garden"] }));
+    const { client } = await connected(host.endpoint);
+    void client.request({ type: "session.open", journey: "garden" });
+    await vi.waitFor(() => expect(host.requestsOf("session.open")).toHaveLength(1));
+    endFakeHosts();
+    serveFakeHost(world({ heldOpens: ["garden"] }));
+    endFakeHosts();
+    expect(take().map((violation) => violation.detail)).toEqual([
+      "the session.open held for garden was never released",
+      "the session.open scripted to be held for garden was never sent",
+    ]);
+  });
+
+  it("refuses to hold an open for a Journey that cannot be opened", () => {
+    expect(() => serveFakeHost(world({ heldOpens: ["attic"] }))).toThrow(
+      'The fake host\'s world: heldOpens holds "attic", a Journey with no project path',
+    );
+  });
+});
+
+describe("the fake host's other answers", () => {
+  it("lists the world's providers for a sign-in panel, none when it has none", async () => {
+    const provider = { id: "anthropic", name: "Anthropic", apiKey: { label: "API key" } };
+    const host = serveFakeHost(world({ providers: [provider] }));
+    const { client } = await connected(host.endpoint);
+    await expect(client.request({ type: "auth.providers" })).resolves.toEqual({ type: "auth.providers", providers: [provider] });
+    const bare = serveFakeHost(world());
+    const other = await connected(bare.endpoint);
+    await expect(other.client.request({ type: "auth.providers" })).resolves.toEqual({ type: "auth.providers", providers: [] });
+  });
+
+  it("answers session.abort for a session it opened, and leaves the turn to play as scripted", async () => {
+    const host = serveFakeHost(world({ turns: [{ prompt: "Hello", events: answer("Hello"), held: true }] }));
+    const { client } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden" });
+    await client.request({ type: "session.prompt", sessionId: "session-1", text: "Hello" });
+    await expect(client.request({ type: "session.abort", sessionId: "session-1" })).resolves.toEqual({
+      type: "session.abort",
+      sessionId: "session-1",
+    });
+    expect(host.heldTurn().remaining).toBe(answer("Hello").length);
+    host.heldTurn().release();
+  });
+
+  it("says a Journey's session runs where the world says, when not at its listed path", async () => {
+    const host = serveFakeHost(world({ sessionCwds: { garden: "/Users/test/gardens/garden" } }));
+    const { client } = await connected(host.endpoint);
+    await expect(client.request({ type: "session.open", journey: "garden" })).resolves.toMatchObject({
+      cwd: "/Users/test/gardens/garden",
+    });
+  });
+});
