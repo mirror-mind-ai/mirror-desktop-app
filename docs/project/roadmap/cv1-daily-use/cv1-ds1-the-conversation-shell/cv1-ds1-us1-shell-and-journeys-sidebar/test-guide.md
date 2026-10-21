@@ -157,7 +157,7 @@ reverted:
 | A failed open leaves the message in the transcript | the store's failed-open test |
 | No refusal while a session opens or a turn runs | the store's open-once and running tests |
 | A given-up connection is not closed (the lease ignored) | the connection's lease test; the proof test, the switching and the held-open UI tests, where every event arrived twice |
-| Selecting a Journey opens its session, as the console did | six UI tests, the proof test among them |
+| Selecting a Journey opens its session, as the console did | nine of the sixteen UI tests, the proof test among them |
 | The working marker never shown | the switching and held-open UI tests |
 | The conversation not keyed by Journey | nothing: no per-Journey state lives in the component since drafts moved into the store. The key stays for the local state US2 will add; no test proves it today |
 
