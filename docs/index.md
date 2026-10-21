@@ -9,5 +9,6 @@
 | [project/history/predecessor.md](project/history/predecessor.md) | Lineage to the first body, what carries over, the rename choreography, and the Core-owned prerequisites ledger |
 | [project/explorations/reinvention-proposal.md](project/explorations/reinvention-proposal.md) | The founding design direction |
 | [project/spikes/](project/spikes/) | The four foundation spikes, with measurements and findings |
+| [process/development-guide.md](process/development-guide.md) | How a Builder session moves from intention to a verified change: roles, the Ariad lifecycle, checkpoints, gates, where docs go |
 | [process/worklog.md](process/worklog.md) | Milestones, newest last |
 | [../AGENTS.md](../AGENTS.md) | Working rules for humans and coding agents |

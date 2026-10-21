@@ -5,7 +5,9 @@ repository is its second body: a clean successor to
 `mirror-mind-ai/mirror-desktop` (see
 [docs/project/history/predecessor.md](docs/project/history/predecessor.md)).
 Read [docs/index.md](docs/index.md) first: briefing, decisions, the Ariad
-roadmap. The founding design is
+roadmap. How a session moves from Pull to Done, with its checkpoints and
+gates, is the [development guide](docs/process/development-guide.md). The
+founding design is
 [docs/project/explorations/reinvention-proposal.md](docs/project/explorations/reinvention-proposal.md).
 
 ## Shape
