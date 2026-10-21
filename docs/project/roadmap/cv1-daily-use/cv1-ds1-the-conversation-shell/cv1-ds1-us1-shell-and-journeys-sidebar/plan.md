@@ -200,11 +200,11 @@ When the person types "Hello" and presses Enter
 Then the fake host received exactly one session.open for garden, then one session.prompt for session-1 with "Hello"
 And the header shows the session's cwd, the model and the thinking level
 
-Given Garden's turn is held and Beds is picked while Garden's item is aria-busy
+Given Garden's turn is held, a draft typed in Garden after sending, and Beds picked while Garden's item is aria-busy
 When the person types in Beds, sends a prompt, and the held turn is released while Beds is shown
 Then Beds' composer started empty, Beds offered Send not Stop, its prompt carried session-2
 And after Garden's item is no longer aria-busy, Beds shows nothing of Garden's turn
-And back in Garden, the draft typed before sending is not there, "Hello" and the whole answer are
+And back in Garden, its draft, "Hello" and the whole answer are there
 And the fake host received one session.open for garden and one for beds
 
 Given Garden's session.open is held
