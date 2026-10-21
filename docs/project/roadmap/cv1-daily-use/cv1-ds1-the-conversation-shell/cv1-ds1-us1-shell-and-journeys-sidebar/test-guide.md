@@ -19,15 +19,22 @@ finalizes them and records their output under Validation Evidence.
    npx vitest run apps/desktop/src/shell apps/desktop/src/App.test.tsx --project desktop
    ```
 
-   Expected, one test each, as the plan lists them: the hierarchy and the
-   pathless parent; picking writes nothing (double click included); the
-   first send opens once and the header shows `cwd`, model and thinking;
-   switching with a held turn (draft, `aria-busy`, Send not Stop in Beds,
-   `session-2`, nothing of Garden's in Beds, abort carrying `session-1`);
-   the held `session.open`; no project path; `models: []`;
-   `mirror_not_configured` with Try again; `unauthorized` on `hello` with
-   Try again; `session_open_failed` with retry; the empty sidebar; the
-   moved proof test; the moved mid-turn leak test.
+   Expected, sixteen tests, green:
+   - `Sidebar.test.tsx`: the hierarchy; a picked Journey opens nothing,
+     double click included, until the first send; no project path (the
+     reason, the command, Refresh, and its child opening alone); no active
+     Journeys (the hidden count, Refresh); Mirror not set up (the heading,
+     the host's words once, `mirror init`, Try again).
+   - `Conversation.test.tsx`: the first send opens once and the header shows
+     the session's `cwd`, model and thinking; switching with a held turn
+     (draft, `aria-busy`, Send not Stop in Beds, `session-2`, nothing of
+     Garden's in Beds); Stop reaching `session-1`; a held `session.open`
+     keeping Beds on screen; a failed open named in place, the message back
+     in the composer, the next send retrying.
+   - `Shell.test.tsx`: the host out of reach (the statement, the host's words
+     once, nothing to pick, Try again connecting); About and Sign in.
+   - `App.test.tsx`: the moved proof test; the moved mid-turn test; a clean
+     start on every render; no model to use.
 
 3. **The stores, the tree and the helpers**, as pure state:
 
@@ -100,14 +107,12 @@ because the first send in each binds a Mirror conversation to it.
    after).
    Observe: the area says it has no project path yet and shows the command;
    there is no composer.
-6. **The host cannot be reached.** Quit the app, run
-   `MIRROR_HOST_TOKEN=x npm run host` so the port is held by a host the
-   shell did not start, then `npm run dev`; or stop the host from the
-   process list after launch.
-   Observe: the area says the host could not be reached and offers Try
-   again; the sidebar lists nothing. If this step cannot be reproduced on
-   your machine, record "host unreachable: not manually verified" in the
-   evidence.
+6. **The host cannot be reached.** Not reproducible by hand in this build:
+   the shell starts its own host on a port of its own, so nothing outside
+   can hold that port, and a host that never starts leaves the app waiting
+   for it, the cold-start path CV1.DS2.TS1 owns. The fake host proves the
+   statement and Try again (`Shell.test.tsx`). Record "host unreachable: not
+   manually verified" in the evidence.
 7. **The console is gone.** `git ls-files apps/desktop/src | grep -i
    console`; open `App.tsx`.
    Observe: nothing named console; `App.tsx` composes the shell.
@@ -116,4 +121,70 @@ Pass: every observation holds. Fail: any one does not.
 
 ## Validation Evidence
 
-Pending implementation and validation.
+Recorded on 2026-10-21.
+
+- `BASE` is `19134f8`, the approved plan, the last commit before US1's
+  implementation.
+- `STORY` is `0fdcbea`.
+
+**The gate.** Typecheck, `npm test`, build and `git diff --check` are green.
+`npm test` runs 146 tests in 19 files: 12 in `node`, 134 in `desktop`. The
+window capability changed, so `cargo check` ran too: green.
+
+**Collection, by test name.** Every test at `BASE` is still collected, or
+moved by name:
+
+- the four `reduceRows` tests, from `src/reduceRows.test.ts` to
+  `src/conversations/transcript.test.ts`, unchanged;
+- the console's two UI tests, in `src/App.test.tsx`, now under "the shell
+  against the fake host": "can end in the middle of a turn…" with its name,
+  and the proof test reworded for lazy open, "picks a Journey, sends a
+  prompt, and watches the answer stream in until the turn settles".
+
+The additions are US1's 81, each collected once: 18 in the conversations
+store, 10 in the connection, 6 in the Journeys store, 5 in the tree, 6 in
+`shortenHome`, 3 in the store registry, 13 in the fake host, 12 UI tests in
+`shell/`, and 4 in `App.test.tsx` (the two moved, a clean start, and no
+model). The node set is unchanged.
+
+**Red runs.** Each mutation turned the tests that own it red, and was then
+reverted:
+
+| Mutation | Red |
+|---|---|
+| Host events applied to the conversation on screen, not the session's owner | the store's routing tests; the switching and held-open UI tests |
+| No reset guard, so a send still waiting writes after a reset | the store's isolation test |
+| A failed open leaves the message in the transcript | the store's failed-open test |
+| No refusal while a session opens or a turn runs | the store's open-once and running tests |
+| A given-up connection is not closed (the lease ignored) | the connection's lease test; the proof test, the switching and the held-open UI tests, where every event arrived twice |
+| Selecting a Journey opens its session, as the console did | six UI tests, the proof test among them |
+| The working marker never shown | the switching and held-open UI tests |
+| The conversation not keyed by Journey | nothing: no per-Journey state lives in the component since drafts moved into the store. The key stays for the local state US2 will add; no test proves it today |
+
+**Determinism.** Green with `--sequence.shuffle` and the seeds 20261022, 3
+and 7, and in 20 consecutive runs of the `desktop` project.
+
+**The tree's order is the core's.** The expected outline in `tree.test.ts`
+is what the Mirror core's own `listJourneyOptions` (mirror-mind 0.35.0)
+printed for the same rows: `apple`, `root`, `Seed`, `Sprout` under `Seed`,
+`Banana`, `Mango`, `Zinnia`, `écoles`. It ran on a copy of
+`journeyOptions.ts` and `parentJourney.ts`, because Node will not strip
+types under `node_modules`.
+
+**Beyond the plan's letter**, named so the review can judge them:
+
+- *Refresh* in the no-active-Journeys and no-project-path states, and the
+  sidebar keeping its list on screen while it looks again. Both states name
+  a fix made outside the app; without a way to look again, the next step
+  would have been a restart.
+- Three fake-host answers the approved tests needed: `auth.providers` for
+  the sign-in panel, `session.abort` for Stop's routing (its effect on a
+  turn stays unplayed), and a session `cwd` differing from the listed path.
+- `core:window:allow-start-dragging` in the window's capability: the
+  console's drag region never had it, so the overlay title bar could not
+  move the window.
+- The plan's switching scenario corrected (`0fdcbea`): the draft kept is
+  the one typed after sending.
+
+**Navigator validation.** Pending: the route above, on two Journeys the
+Navigator names.
