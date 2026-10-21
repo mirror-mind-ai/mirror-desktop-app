@@ -8,7 +8,9 @@ export type Row =
   | { kind: "user"; text: string }
   | { kind: "assistant"; text: string; done: boolean; stopReason?: string; errorMessage?: string }
   | { kind: "tool"; toolCallId: string; name: string; summary: string; done: boolean; isError?: boolean; durationMs?: number }
-  | { kind: "notice"; text: string };
+  | { kind: "notice"; text: string }
+  /** Something that failed to load when the session opened: informational, so it is shown muted, never as an alarm. */
+  | { kind: "diagnostic"; text: string };
 
 /** Fold one session event into the transcript rows. Pure, so it can be tested without a screen. */
 export function reduceRows(rows: Row[], event: SessionEvent): Row[] {

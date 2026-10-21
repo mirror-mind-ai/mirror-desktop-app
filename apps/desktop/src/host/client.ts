@@ -38,6 +38,15 @@ export async function hostEndpoint(): Promise<HostEndpoint> {
   });
 }
 
+/** What the app's state needs of a connection to the host. HostClient is one; store tests pass a stub. */
+export type HostConnection = Pick<HostClient, "request" | "close" | "onEvent">;
+
+/** A failure as the screens name it: the host's own code and words, or an internal failure in its own words. */
+export function failureOf(error: unknown): { code: string; message: string } {
+  if (error instanceof HostRequestError) return { code: error.code, message: error.message };
+  return { code: "internal_failure", message: error instanceof Error ? error.message : String(error) };
+}
+
 export class HostRequestError extends Error {
   constructor(
     readonly code: string,
