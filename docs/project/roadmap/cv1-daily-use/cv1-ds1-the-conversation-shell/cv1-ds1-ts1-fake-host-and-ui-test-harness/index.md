@@ -2,7 +2,7 @@
 
 # CV1.DS1.TS1 — Fake host and UI test harness
 
-**Status:** 🟡 Planned
+**Status:** ✅ Done — 2026-10-21
 **Type:** Technical Story
 
 ---

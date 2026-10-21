@@ -21,7 +21,7 @@ place they prefer over the terminal — installed in one step, fast, calm?
 | Code | Capability Value | Outcome | Status |
 |------|------------------|---------|--------|
 | [CV0](cv0-foundation-spikes/index.md) | Foundation Spikes | The four questions that could sink the design are answered with running code: one host embeds Pi and Mirror; the bundle runs on a clean machine; sign-in happens in-app; a session is bound to a Journey by name | ✅ Done — 2026-10-20 |
-| [CV1](cv1-daily-use/index.md) | Daily Use | A person opens a Journey and lives in the conversation: a real shell and transcript, the Journey's sessions, live control of a turn, and an app that quits and restarts cleanly — used daily instead of terminal Pi for Journey work | 🟡 Planned |
+| [CV1](cv1-daily-use/index.md) | Daily Use | A person opens a Journey and lives in the conversation: a real shell and transcript, the Journey's sessions, live control of a turn, and an app that quits and restarts cleanly — used daily instead of terminal Pi for Journey work | 🟡 In progress |
 | CV2 | First Run | A new person installs the app and reaches a working conversation through one sequence: Mirror home, provider, OpenRouter key, name — with the state-aware suggestions a first screen can honestly offer | ⚪ Future |
 | CV3 | Trusted Distribution | Signed, notarized builds for macOS from a release workflow, Windows and Linux bundles, and a self-update channel with the trust boundaries the first body established | ⚪ Future |
 | CV4 | Mirror Surfaces | What Mirror knows, as screens rather than terminal text: the welcome card, Journey status, memories, tasks and the week, mode and persona made visible in the conversation | ⚪ Future |

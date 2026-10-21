@@ -9,3 +9,4 @@ Meaningful milestones, newest last.
 - **2026-10-20** — Spike 4: a session opened for a Journey is bound to it by name ([spike](../project/spikes/spike-4-journey-binding.md)).
 - **2026-10-20** — Ariad adopted for the journey; CV0 recorded done, CV1 Daily Use authored with two Delivery Stories; decisions D1–D12 recorded.
 - **2026-10-21** — Refinement Workbench opened and development guide written, before CV1's first story is planned ([guide](development-guide.md)).
+- **2026-10-21** — CV1.DS1.TS1 done: the UI test harness. A fake host replaces the UI's two doors, every desktop test runs in happy-dom with no Pi, model or network, and the first UI test proves the console streaming a turn; the built app stays byte-identical ([story](../project/roadmap/cv1-daily-use/cv1-ds1-the-conversation-shell/cv1-ds1-ts1-fake-host-and-ui-test-harness/index.md)).
