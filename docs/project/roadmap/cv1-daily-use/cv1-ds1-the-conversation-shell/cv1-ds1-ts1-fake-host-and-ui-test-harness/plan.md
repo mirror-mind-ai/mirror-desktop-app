@@ -153,7 +153,8 @@ This is the second version of the plan, revised after a four-lens review; see
 - End-to-end runs in the real Tauri shell, host tests against a fake Pi, and
   CI.
 - Changing the protocol, or how the real client treats a message that breaks
-  it. That defect was found while planning and is reported separately.
+  it. That defect was found while planning and is captured as
+  [CR001](../../../../refinement/rs001-host-ui-contract/cr001-a-message-that-breaks-the-protocol-is-dropped-silently.md).
 
 ## Acceptance Behavior
 

@@ -181,4 +181,8 @@ prompt accepted → agent_start → message_start → message_end system
 - `streamed-answer.json` follows this sequence with four invented text deltas.
   The system message pair it carries is there because the capture found it.
 
-**Navigator validation.** Pending.
+**Navigator validation.** Accepted by the Navigator on 2026-10-21, after the
+four steps above.
+
+**After the debt payment** (`9e0122e`): the gate is green with 71 tests, and
+the built app is still byte-identical to `BASE`.

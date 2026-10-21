@@ -2,25 +2,25 @@
 
 ## Status
 
-Pending debt decision
+Reviewed
 
 ## Debt Findings
 
-- 1) networkGuard.ts installs happy-dom's loader interceptor through an untyped settings API, silently skips it if that API moves, and no test pins it (it works today: a fetch captured before the guard is blocked and recorded). Recommended: pay now, with one test and a loud failure when the API is missing. 2) The fixture loader's rule that an assistant message ends with its joined text deltas assumes one text block per message, as documented in turns.ts. Recommended: defer to the ledger, revisit at the first fixture whose assistant message carries more than one text block.
+- Paid: the network guard's happy-dom loader interceptor is now pinned by a test (a fetch captured before the guard is blocked and recorded) and fails loudly if happy-dom's settings API moves (9e0122e). Carried forward: TD-001 in the technical debt ledger, the fixture loader's assumption of one text block per assistant message.
 
 ## Debt Decision
 
-pending
+defer
 
 ## Defer Reason
 
-none
+No fixture needs more than one text block per assistant message, and the real turn captured for TS1 had one.
 
 ## Revisit Trigger
 
-none
+The first fixture whose assistant message carries more than one text block, likely in CV1.DS1.US2.
 
 ## Missing Decision
 
-- Navigator debt decision is required
-<!-- ariad-seal sha256:7e61e3e80f0f9cff6b11530ff1b7b007897bbc076daf94f109f2d1573e533cb4 — Ariad wrote this file and rewrites it only while this line matches the text above it. Edit the file and Ariad will leave it as it is. -->
+- none
+<!-- ariad-seal sha256:7e77d6b7832555bb087b9a80c0de5b1968e8adb33dffdc1c0397aae7bed634fa — Ariad wrote this file and rewrites it only while this line matches the text above it. Edit the file and Ariad will leave it as it is. -->
