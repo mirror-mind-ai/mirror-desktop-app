@@ -112,4 +112,73 @@ Pass: every observation holds. Fail: any one does not.
 
 ## Validation Evidence
 
-Pending implementation and validation.
+Recorded on 2026-10-21.
+
+- `BASE` is `1c971ea`, the last commit before TS1's implementation.
+- `STORY` is `4e6b6b3`, the commit that completes it.
+
+**The gate.** Typecheck, `npm test`, build and `git diff --check` are green.
+`npm test` runs 69 tests in 10 files: 12 in `node`, 57 in `desktop`.
+
+**Collection.**
+
+- Both files collected at `BASE` are still collected:
+  `packages/protocol/src/index.test.ts` under `node`, and
+  `apps/desktop/src/reduceRows.test.ts` under `desktop`.
+- The additions are TS1's eight test files, each collected once, under
+  `desktop`.
+
+**Artifact identity.**
+
+- Built from fresh worktrees after `npm ci`, `BASE` and `STORY` produce
+  byte-identical dist files: `index-Bg215EXL.js`, `index-Cq9PZ48Z.css` and
+  `index.html`, with the same SHA-256.
+- No CSS rule came from scanning `reduceRows.test.ts`, so there are none to
+  list.
+- The Tailwind exclusion is what keeps the CSS identical. With the
+  `@source not` lines removed, the CSS changed: the harness's own words became
+  rules.
+- The production dependencies in the lockfile are identical.
+
+**The committed state.** In the `STORY` worktree,
+`npm ci && npm test && npm run build` is green: 69 tests.
+
+**Red runs.** Each mutation turned the proof test red and was then reverted:
+
+| Mutation | Failure |
+|---|---|
+| `reduceRows` replaces the assistant text instead of appending to it | no element whose text is exactly `"Tides turn slowly\n"` |
+| `agent_settled` no longer clears busy | Send never comes back |
+| the `if (cancelled)` branch is removed | the answer is not found exactly: it renders twice |
+| the fake host delivers every event twice | the answer is not found exactly |
+| the console opens a different Journey | the composer never appears; both tests fail, and the unscripted `session.open` is recorded |
+
+The harness's own checks were broken on purpose too:
+
+- A swallowed `fetch`, a `console.error` and a socket to another address each
+  failed at teardown, by name.
+- The script canary failed with script evaluation switched on.
+- The boundary test failed when `App.tsx` imported the harness.
+
+**Determinism.** All green:
+
+- `--sequence.shuffle --sequence.seed=20261021`;
+- seed 3, which runs the mid-turn test before the proof test;
+- 20 consecutive runs of the `desktop` project.
+
+**Structure capture.** One real turn was run on the Journey the Navigator
+named, `nomadic-life`, with `npm run turn` and the prompt "Reply with the
+single word: pong". Only its structure is recorded:
+
+```text
+prompt accepted → agent_start → message_start → message_end system
+→ message_start → message_end user → message_start → text_delta (one or more)
+→ message_end assistant (stop) → agent_end → agent_settled
+```
+
+- There were no thinking, tool or retry events.
+- The prompt's reply arrived before `agent_start`.
+- `streamed-answer.json` follows this sequence with four invented text deltas.
+  The system message pair it carries is there because the capture found it.
+
+**Navigator validation.** Pending.
