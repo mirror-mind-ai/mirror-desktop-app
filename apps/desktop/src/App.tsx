@@ -1,8 +1,9 @@
-import type { HostEvent, HostIdentity, Journey, SessionEvent } from "@mirror-desktop/protocol";
+import type { HostEvent, HostIdentity, Journey } from "@mirror-desktop/protocol";
 import { Compass, KeyRound, Loader2, Send, Sparkles, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
 
+import { type Row, reduceRows } from "./conversations/transcript.ts";
 import { HostClient, hostEndpoint } from "./host/client.ts";
 import { SignIn } from "./SignIn.tsx";
 
@@ -12,12 +13,6 @@ import { SignIn } from "./SignIn.tsx";
  * Tauri window. It is not the product's conversation surface; that one grows
  * from stores and components once this path is proven.
  */
-
-type Row =
-  | { kind: "user"; text: string }
-  | { kind: "assistant"; text: string; done: boolean; stopReason?: string; errorMessage?: string }
-  | { kind: "tool"; toolCallId: string; name: string; summary: string; done: boolean; isError?: boolean; durationMs?: number }
-  | { kind: "notice"; text: string };
 
 interface Session {
   id: string;
@@ -283,60 +278,5 @@ function Transcript({ row }: { row: Row }) {
       );
     case "notice":
       return <p className="text-xs text-amber-400">{row.text}</p>;
-  }
-}
-
-/** Fold one session event into the transcript rows. Pure, so it can be tested without a screen. */
-export function reduceRows(rows: Row[], event: SessionEvent): Row[] {
-  const last = rows[rows.length - 1];
-  switch (event.type) {
-    case "text_delta": {
-      if (last?.kind === "assistant" && !last.done) {
-        return [...rows.slice(0, -1), { ...last, text: last.text + event.delta }];
-      }
-      return [...rows, { kind: "assistant", text: event.delta, done: false }];
-    }
-    case "message_end": {
-      if (event.role !== "assistant") return rows;
-      if (last?.kind === "assistant" && !last.done) {
-        return [
-          ...rows.slice(0, -1),
-          {
-            ...last,
-            done: true,
-            ...(event.stopReason ? { stopReason: event.stopReason } : {}),
-            ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
-          },
-        ];
-      }
-      if (event.errorMessage) return [...rows, { kind: "notice", text: event.errorMessage }];
-      return rows;
-    }
-    case "tool_start":
-      return [
-        ...rows,
-        {
-          kind: "tool",
-          toolCallId: event.toolCallId,
-          name: event.toolName,
-          summary: JSON.stringify(event.args).slice(0, 160),
-          done: false,
-        },
-      ];
-    case "tool_end":
-      return rows.map((row) =>
-        row.kind === "tool" && row.toolCallId === event.toolCallId
-          ? {
-              ...row,
-              done: true,
-              isError: event.isError,
-              ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
-            }
-          : row,
-      );
-    case "retry":
-      return [...rows, { kind: "notice", text: `retrying (${event.attempt}/${event.maxAttempts}): ${event.errorMessage}` }];
-    default:
-      return rows;
   }
 }

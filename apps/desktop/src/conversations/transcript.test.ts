@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { reduceRows } from "./App.tsx";
+import { reduceRows } from "./transcript.ts";
 
 describe("reduceRows", () => {
   it("streams text deltas into one open assistant row and closes it at message_end", () => {
