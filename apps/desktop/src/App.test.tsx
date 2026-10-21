@@ -1,5 +1,5 @@
 import type { AvailableModel, Journey, SessionEvent } from "@mirror-desktop/protocol";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
@@ -79,5 +79,19 @@ describe("the console against the fake host", () => {
     await user.click(await screen.findByRole("button", { name: /Garden/ }));
     await user.type(await screen.findByRole("textbox"), "Hello{Enter}");
     await screen.findByText("Hello");
+  });
+
+  // Characterization, before the shell replaces the console (CV1.DS1.US1):
+  // with no model it can use, the console puts the sign-in panel in place of
+  // everything, so no Journey can be picked. The shell keeps the Journeys in
+  // sight and moves sign-in into the conversation area.
+  it("with no model it can use, offers sign-in in place of the Journeys", async () => {
+    serveFakeHost({ models: [], journeys: [garden], turns: [] });
+    renderApp();
+
+    await screen.findByRole("heading", { name: "Sign in to a model provider" });
+    await waitFor(() => expect(screen.queryByText("Loading providers…")).toBeNull());
+    expect(screen.queryByRole("heading", { name: "Open a Journey" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Garden/ })).toBeNull();
   });
 });
