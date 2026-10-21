@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { FakeSocket } from "./fakeSocket.ts";
+import { happyDomSettings } from "./networkGuard.ts";
 import { take } from "./violations.ts";
 
 const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+// Captured while this file loads, before the setup installs the guard: the way
+// a library that keeps its own reference to fetch would hold happy-dom's.
+const fetchBeforeTheGuard = globalThis.fetch;
 
 describe("the network guard", () => {
   it("is installed for every desktop test: the only socket is the fake one", () => {
@@ -36,6 +41,19 @@ describe("the network guard", () => {
     await nextTask();
     expect(socket.readyState).toBe(WebSocket.CLOSED);
     expect(take()).toEqual([{ kind: "socket", detail: expect.stringContaining("ws://127.0.0.1:1421") }]);
+  });
+
+  it("blocks and records, at happy-dom's own loader, a fetch captured before the guard was installed", async () => {
+    expect(fetchBeforeTheGuard).not.toBe(globalThis.fetch);
+    const response = await fetchBeforeTheGuard("https://example.com/early");
+    expect(response.status).toBe(503);
+    expect(take()).toEqual([{ kind: "network", detail: "happy-dom load https://example.com/early" }]);
+  });
+
+  it("fails loudly when happy-dom's loader settings are not where the guard expects them", () => {
+    expect(() => happyDomSettings({})).toThrow(/cannot reach happy-dom's loader/);
+    expect(() => happyDomSettings({ happyDOM: { settings: {} } })).toThrow(/cannot reach happy-dom's loader/);
+    expect(happyDomSettings(window).fetch).toHaveProperty("interceptor");
   });
 
   it("never runs a script that rendered content puts on the page", () => {

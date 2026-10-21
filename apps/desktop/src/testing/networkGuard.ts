@@ -47,8 +47,25 @@ class BlockedEventSource extends EventTarget {
   }
 }
 
-interface HappyDomWindow {
-  happyDOM?: { settings: { fetch: { interceptor: unknown } } };
+interface HappyDomLoaderSettings {
+  fetch: { interceptor: unknown };
+}
+
+/**
+ * happy-dom's own loader settings, through its window API. The DOM types do not
+ * describe `window.happyDOM`, hence the one cast, at that boundary. If an upgrade
+ * moves the API this fails loudly, because a guard that silently skipped its
+ * lowest layer would let a fetch captured before the guard reach the network.
+ */
+export function happyDomSettings(win: unknown): HappyDomLoaderSettings {
+  const settings = (win as { happyDOM?: { settings?: Partial<HappyDomLoaderSettings> } }).happyDOM?.settings;
+  if (!settings?.fetch || !("interceptor" in settings.fetch)) {
+    throw new Error(
+      "The network guard cannot reach happy-dom's loader: window.happyDOM.settings.fetch.interceptor is missing. " +
+        "Check the happy-dom version before trusting UI tests offline.",
+    );
+  }
+  return settings as HappyDomLoaderSettings;
 }
 
 /** Close every door but the fake host's socket. Owned by the UI setup, once per test. */
@@ -65,21 +82,18 @@ export function installNetworkGuard(): void {
     blocked("sendBeacon", urlOf(url));
     return false;
   });
-  // Beneath the globals: what happy-dom itself would load (a stylesheet, an
-  // image, an iframe) goes through its own fetch, which the stubs above never see.
-  const settings = (window as unknown as HappyDomWindow).happyDOM?.settings;
-  if (settings) {
-    settings.fetch.interceptor = {
-      beforeAsyncRequest: async ({ request }: { request: { url: string } }) => {
-        blocked("happy-dom load", request.url);
-        return new Response(null, { status: 503, statusText: "Blocked by the fake host" });
-      },
-    };
-  }
+  // Beneath the globals: what happy-dom itself loads (a stylesheet, an image, an
+  // iframe, or a fetch some library captured before these stubs existed) goes
+  // through its own fetch, which the stubs above never see.
+  happyDomSettings(window).fetch.interceptor = {
+    beforeAsyncRequest: async ({ request }: { request: { url: string } }) => {
+      blocked("happy-dom load", request.url);
+      return new Response(null, { status: 503, statusText: "Blocked by the fake host" });
+    },
+  };
 }
 
 /** Reopen happy-dom's own loader; the stubs are restored with every other global. */
 export function removeNetworkGuard(): void {
-  const settings = (window as unknown as HappyDomWindow).happyDOM?.settings;
-  if (settings) settings.fetch.interceptor = null;
+  happyDomSettings(window).fetch.interceptor = null;
 }
