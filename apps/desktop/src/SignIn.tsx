@@ -4,7 +4,7 @@ import { CheckCircle2, ExternalLink, KeyRound, Loader2, LogIn, X } from "lucide-
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import type { HostClient } from "./host/client.ts";
+import type { HostConnection } from "./host/client.ts";
 
 /**
  * Sign in to a model provider. Pi runs the flow in the host; this screen
@@ -32,7 +32,7 @@ export function SignIn({
   onSignedIn,
   onDismiss,
 }: {
-  client: HostClient;
+  client: HostConnection;
   onSignedIn: () => void;
   onDismiss?: () => void;
 }) {

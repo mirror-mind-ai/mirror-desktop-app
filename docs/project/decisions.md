@@ -160,3 +160,20 @@ happy-dom, with script evaluation and resource loading off, and packages run
 in node. Fixtures are invented, never copied from a real session, and Tailwind
 does not scan test sources, so tests never shape the shipped artifact. The
 conventions are in AGENTS.md.
+
+## D14 — Selecting a Journey shows it; the first send opens its session
+
+**Date:** 2026-10-21 · **Story:** [CV1.DS1.US1](roadmap/cv1-daily-use/cv1-ds1-the-conversation-shell/cv1-ds1-us1-shell-and-journeys-sidebar/index.md)
+
+Opening a session writes: the host starts Pi in the Journey's project path,
+and binds a Mirror conversation to it (D5, D8). In a sidebar, selecting is how
+a person looks around, so the shell keeps looking apart from acting.
+Selecting a Journey shows it, with its project path and its composer, and
+writes nothing. The first send opens its session, which stays open for the
+app run. Each picked Journey keeps its own conversation, draft and running
+turn, and host events reach the conversation whose session they name.
+
+The spike console opened a session on every click, which would have left an
+empty Mirror conversation behind for every look around the sidebar. CV1.DS2
+keeps the rule when sessions are listed and resumed: navigation never starts
+Pi or binds a conversation, a send or an explicit choice does.

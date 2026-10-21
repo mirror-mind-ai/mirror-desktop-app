@@ -80,15 +80,31 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
   from `mirror-mind-ai/mirror-desktop` is copied deliberately with a
   provenance note; its settlement, journal, outbox and projection designs are
   not reintroduced.
+- **The UI's state lives in stores**, one per concern as
+  `apps/desktop/src/<concern>/store.ts` (host, journeys, conversations): data
+  only, from one initial state, with the actions exported beside it and
+  tested against a stub connection, no DOM. Every store registers itself for
+  reset. How to write and read them, the selector rule included, is at the
+  top of `apps/desktop/src/stores/registry.ts`.
+- **Selecting a Journey writes nothing** (D14). The first send opens its
+  session; navigation never starts Pi or binds a Mirror conversation.
 - **TDD for behavior.** A feature or fix starts with a failing test; error
   paths carry the same burden as happy paths; `retry: 0`, a flaky test is
   fixed, never retried.
 - **UI tests run against the fake host** (`apps/desktop/src/testing/`, whose
   modules say how each part works). Every desktop test runs in happy-dom with
   no Pi, no model and no network.
-  - Compose the app through `renderApp()`, and script the world with
-    `serveFakeHost({ models, journeys, turns })`. Fixtures come from
-    `loadTurn()`, and a held turn is released step by step.
+  - Compose the app through `renderApp()`, which resets every store first,
+    and script the world with `serveFakeHost({ models, journeys, turns })`.
+    Fixtures come from `loadTurn()`, and a held turn is released step by
+    step. Invented Journeys and turns for the shell are in
+    `testing/worlds.ts`, and the shared screen queries in
+    `testing/queries.ts`.
+  - A world scripts the real host's failures with `failures` (`hello`,
+    `journeys.list`, or one Journey's `session.open`), answered until the
+    test calls `stopFailing()`; `heldOpens` holds a `session.open` until
+    `heldOpen(journey).release()`. A scripted failure or hold the test never
+    exercised fails it at teardown.
   - Find elements by role, label or text, the way a person does; use
     `data-testid` only where nothing accessible names the element. Act
     through `userEvent.setup()`; wait with `findBy*`/`waitFor`, never a fixed

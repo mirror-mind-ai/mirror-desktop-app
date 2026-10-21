@@ -30,9 +30,10 @@ registerStore("journeys", useJourneys, initialState, () => {
   generation += 1;
 });
 
+/** Ask the host for the Journeys. A list already on screen stays there until the answer replaces it. */
 export async function loadJourneys(client: HostConnection): Promise<void> {
   const mine = ++generation;
-  useJourneys.setState({ status: "loading" }, true);
+  if (useJourneys.getState().status !== "loaded") useJourneys.setState({ status: "loading" }, true);
   let next: JourneysState;
   try {
     const result = await client.request({ type: "journeys.list" });

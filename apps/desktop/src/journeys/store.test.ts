@@ -24,6 +24,19 @@ describe("loading the Journeys", () => {
     expect(useJourneys.getState()).toEqual({ status: "loaded", journeys: [garden] });
   });
 
+  it("keeps the listed Journeys on screen while it looks again", async () => {
+    const answers: ((result: HostResultBody) => void)[] = [];
+    const client = stubHost(() => new Promise((resolve) => answers.push(resolve)));
+    const first = loadJourneys(client);
+    answers[0]?.({ type: "journeys.list", journeys: [garden] });
+    await first;
+    const again = loadJourneys(client);
+    expect(useJourneys.getState()).toEqual({ status: "loaded", journeys: [garden] });
+    answers[1]?.({ type: "journeys.list", journeys: [] });
+    await again;
+    expect(useJourneys.getState()).toEqual({ status: "loaded", journeys: [] });
+  });
+
   it("keeps the host's error code and words when the list fails", async () => {
     const client = stubHost(async () => {
       throw new HostRequestError("mirror_not_configured", "No Mirror home is configured on this machine yet.");

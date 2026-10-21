@@ -1,8 +1,8 @@
 // The harness's one recorder.
 //
 // Anything a UI test is not allowed to do is recorded here with what was
-// attempted. Throwing would not be enough: the console turns errors into
-// toasts, so a check that only threw would be swallowed and the test would
+// attempted. Throwing would not be enough: the UI catches errors and shows
+// them, so a check that only threw would be swallowed and the test would
 // pass. The UI setup calls verify() after every test, so a recorded violation
 // fails the test by name even when the UI caught the error.
 
