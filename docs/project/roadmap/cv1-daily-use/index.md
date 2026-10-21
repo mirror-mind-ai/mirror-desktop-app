@@ -30,4 +30,4 @@ them.
 
 The first user works a Journey in the desktop for a week without reaching
 for terminal Pi for the same work, and the defects that week surfaces are
-captured as Refinement, not as missing stories.
+captured as [Refinement](../../refinement/index.md), not as missing stories.

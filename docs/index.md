@@ -5,6 +5,7 @@
 | [project/briefing.md](project/briefing.md) | Stable premises: what the app is, its shape, ownership, invariants |
 | [project/decisions.md](project/decisions.md) | Incremental decisions, with the spike that proved each |
 | [project/roadmap/index.md](project/roadmap/index.md) | Ariad roadmap: Capability Values, Delivery Stories, Stories |
+| [project/refinement/index.md](project/refinement/index.md) | Refinement Workbench: Refinement Stories and Change Requests, the work that is not a story |
 | [project/history/predecessor.md](project/history/predecessor.md) | Lineage to the first body, what carries over, the rename choreography, and the Core-owned prerequisites ledger |
 | [project/explorations/reinvention-proposal.md](project/explorations/reinvention-proposal.md) | The founding design direction |
 | [project/spikes/](project/spikes/) | The four foundation spikes, with measurements and findings |

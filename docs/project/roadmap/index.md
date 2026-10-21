@@ -45,4 +45,4 @@ Delivery Stories when it is next.
 
 - [Decisions](../decisions.md) · [Briefing](../briefing.md)
 - [Reinvention proposal](../explorations/reinvention-proposal.md) · [Spikes](../spikes/)
-- [Technical debt ledger](technical-debt-ledger.md)
+- [Technical debt ledger](technical-debt-ledger.md) · [Refinement Workbench](../refinement/index.md)
