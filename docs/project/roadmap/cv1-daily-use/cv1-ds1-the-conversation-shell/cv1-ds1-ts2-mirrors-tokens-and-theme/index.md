@@ -54,12 +54,14 @@ Then every --color-* token the theme defines, the light block overrides
   the conversation's measure.
 - State tokens: selection, hover, focus ring, disabled text level; radius
   capped at 6 px; one slow muted indicator shared by opening and streaming.
-- The alarm scale: muted, notice, danger; open diagnostics at muted.
+- The alarm scale as tokens: muted, notice, danger. US1 already shows open
+  diagnostics muted.
 - The theme store and control, `localStorage` persistence, the synchronous
   apply in `main.tsx`, the `useTheme` effect with cleanup, the window
   background matching the shell token, `sonner` on the tokens.
-- Chrome: "Sign in" in the footer, versions behind a quiet affordance, no
-  Sparkles or Compass.
+- Chrome on the tokens. US1 placed it: "Sign in" in the footer, the
+  versions behind About, and no Sparkles or Compass; TS2 gives it its look,
+  the appearance control among it.
 - Harness: ambient theme state cleared per test in `setup.ts`; happy-dom's
   `change` dispatch verified or polyfilled.
 
