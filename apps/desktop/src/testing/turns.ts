@@ -58,6 +58,14 @@ export function loadTurn(name: string): SessionEvent[] {
   return turnFromSource(`${name}.json`, source);
 }
 
+/** What the assistant says in a turn: a test's oracle comes from the fixture, never typed twice. */
+export function assistantTextOf(events: readonly SessionEvent[]): string {
+  for (const event of events) {
+    if (event.type === "message_end" && event.role === "assistant") return event.text;
+  }
+  throw new Error("The turn has no assistant answer.");
+}
+
 /** A fixture file's text, read and checked. */
 export function turnFromSource(file: string, source: string): SessionEvent[] {
   let data: unknown;

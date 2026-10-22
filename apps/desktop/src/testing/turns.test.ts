@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fixtureNames, loadTurn, parseTurn, turnFromSource } from "./turns.ts";
+import { assistantTextOf, fixtureNames, loadTurn, parseTurn, turnFromSource } from "./turns.ts";
 
 const plainTurn = () => [
   { type: "agent_start" },
@@ -114,5 +114,16 @@ describe("a fixture file", () => {
 
   it("is checked even when no test uses it", () => {
     for (const name of fixtureNames()) expect(() => loadTurn(name), name).not.toThrow();
+  });
+});
+
+describe("what the assistant says in a turn", () => {
+  it("is its assistant message's text, so a test's oracle comes from the fixture", () => {
+    expect(assistantTextOf(parseTurn("plain", plainTurn()))).toBe("Tides turn\nslowly.");
+  });
+
+  it("fails rather than invent an oracle when the turn has no assistant answer", () => {
+    const silent = parseTurn("silent", [{ type: "agent_start" }, { type: "agent_end" }, { type: "agent_settled", aborted: false }]);
+    expect(() => assistantTextOf(silent)).toThrow("The turn has no assistant answer.");
   });
 });

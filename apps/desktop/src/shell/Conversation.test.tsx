@@ -5,14 +5,11 @@ import { describe, expect, it } from "vitest";
 import { serveFakeHost } from "../testing/fakeHost.ts";
 import { exactly, messageBox, transcript } from "../testing/queries.ts";
 import { renderApp } from "../testing/renderApp.tsx";
-import { loadTurn } from "../testing/turns.ts";
+import { assistantTextOf, loadTurn } from "../testing/turns.ts";
 import { beds, briefAnswer, garden, model } from "../testing/worlds.ts";
 
 const streamedAnswer = loadTurn("streamed-answer");
-/** What the assistant says in the fixture: the oracle comes from the fixture, never typed twice. */
-const answer =
-  streamedAnswer.flatMap((event) => (event.type === "message_end" && event.role === "assistant" ? [event.text] : []))[0] ??
-  "the fixture has no assistant answer";
+const answer = assistantTextOf(streamedAnswer);
 
 describe("a Journey's conversation", () => {
   it("opens the session on the first send, then shows where it runs, its model and its thinking", async () => {
