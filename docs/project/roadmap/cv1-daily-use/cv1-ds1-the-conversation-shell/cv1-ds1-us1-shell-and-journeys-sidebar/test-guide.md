@@ -194,5 +194,42 @@ types under `node_modules`.
 - The plan's switching scenario corrected (`0fdcbea`): the draft kept is
   the one typed after sending.
 
-**Navigator validation.** Pending: the route above, on two Journeys the
-Navigator names.
+**Navigator validation.** Accepted by the Navigator on 2026-10-22, after a
+run of the real app (`npm run dev`) on Automation and Admin, with captures:
+
+1. The sidebar matched `mirror journeys`: the same 29 active Journeys, the
+   same nesting and order; the retired Mirror GUI and the completed Mirror
+   Mind on Pi absent; the traffic lights clear of the sidebar.
+2. Picking Admin showed its name, `~/dev/workspace/admin` and a composer,
+   and wrote nothing.
+3. Automation's first send opened its session: the header showed
+   `~/dev/workspace/automation`, `anthropic/claude-fable-5` and
+   `thinking max`, and Mirror recorded `5566fc37 [automation]` with the
+   prompt and its answer.
+4. While Automation answered, its sidebar item showed the spinner and Stop
+   replaced Send. Admin's count was recorded as `fbdbb356 [admin]`.
+5. Campos Houses said it has no project path, showed
+   `mirror journey set-path campos-houses /path/to/project` and Refresh,
+   and offered no composer.
+6. Host unreachable: not manually verified, as the route says.
+7. Nothing named console remains; `App.tsx` composes the shell.
+
+Beyond the route, a real multi-turn conversation in Nomadic Life ran with
+tool calls and streamed to the end. Its Markdown shows raw and Mirror's boxed
+surfaces lose their alignment in a proportional font: transcript rendering,
+CV1.DS1.US2's. Both conversations were still open after the app quit: closing
+sessions on quit is CV1.DS2.TS1's.
+
+**A finding outside US1.** Automation's transcript opened with a diagnostic
+row: `mirror: could not bind the session to Journey automation: spawn
+/opt/homebrew/Cellar/node/25.9.0_2/bin/node ENOENT`. Homebrew replaced Node
+(25.9.0_2 by 26.12.1) while the app ran. In development the host runs on the
+machine's `node` and holds the binary it started on: the bind spawns
+`process.execPath`, and the `node` and `mirror` shims point at it, so every
+one of those failed once the binary was gone. Mirror's logger spawns `node`
+through PATH, fell through to the new one, and logged both conversations
+under the right Journeys. What the failure cost was the Journey's Mirror
+context in those sessions' system prompts. The shell showed it as designed:
+a muted row, in place. The bundle runs its own embedded Node, which does not
+change under a running app. Restarting the app after a Node upgrade clears
+it.
