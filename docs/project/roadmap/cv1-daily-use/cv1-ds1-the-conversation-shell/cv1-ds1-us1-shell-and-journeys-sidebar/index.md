@@ -2,7 +2,7 @@
 
 # CV1.DS1.US1 — Shell and Journeys sidebar
 
-**Status:** 🟡 Planned
+**Status:** ✅ Done — 2026-10-22
 **Type:** User Story
 
 ---
