@@ -232,4 +232,5 @@ under the right Journeys. What the failure cost was the Journey's Mirror
 context in those sessions' system prompts. The shell showed it as designed:
 a muted row, in place. The bundle runs its own embedded Node, which does not
 change under a running app. Restarting the app after a Node upgrade clears
-it.
+it. Captured as
+[CR002](../../../../refinement/rs002-host-runtime/cr002-after-a-node-upgrade-the-running-host-spawns-a-node-that-no-longer-exists.md).

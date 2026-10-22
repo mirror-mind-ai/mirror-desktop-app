@@ -30,6 +30,7 @@ or executes work.
 | Order | ID | Story | Status |
 |------:|----|-------|--------|
 | 1 | [RS001](rs001-host-ui-contract/index.md) | Host–UI Contract | proposed |
+| 2 | [RS002](rs002-host-runtime/index.md) | Host Runtime | proposed |
 
 ## Change Requests
 
@@ -38,6 +39,7 @@ Open work is ordered intentionally. Terminal history follows open work.
 | Order | ID | RS | Change | Status | Driver | Delivery |
 |------:|----|----|--------|--------|--------|----------|
 | 1 | [CR001](rs001-host-ui-contract/cr001-a-message-that-breaks-the-protocol-is-dropped-silently.md) | RS001 | A message that breaks the protocol is dropped silently, and the request behind it never settles | captured | — | — |
+| 2 | [CR002](rs002-host-runtime/cr002-after-a-node-upgrade-the-running-host-spawns-a-node-that-no-longer-exists.md) | RS002 | After a Node upgrade, the running host spawns a Node that no longer exists, and binds no session | captured | — | — |
 
 ## Status Vocabulary
 
