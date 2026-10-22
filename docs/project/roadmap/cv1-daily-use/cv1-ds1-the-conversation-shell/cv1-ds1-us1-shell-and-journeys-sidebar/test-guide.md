@@ -79,34 +79,42 @@ because the first send in each binds a Mirror conversation to it.
 
 ## Navigator Validation
 
-1. **The sidebar is Mirror's list.** Run `npm run dev`. Beside it, run
-   `mirror journeys`.
+1. **The sidebar is Mirror's list.** From the repository root
+   (`mirror-desktop-app`, not the first body's `mirror-desktop`), run
+   `npm run dev`. Beside it, run `mirror journeys`.
    Observe: the sidebar shows your active Journeys, each child nested under
    its parent as the command groups them, in the same order, inactive ones
    absent. The traffic lights sit clear of the sidebar and the window drags
    by its top edge.
-2. **Picking writes nothing.** Note the last line of `mirror conversations`.
-   Click `<first>`, then two other Journeys, then `<first>` again.
+2. **Picking writes nothing.** Before clicking anything, run
+   `mirror conversations --journey <first> --limit 3` and the same for
+   `<second>`. Click `<first>`, then `<second>`, then `<first>` again.
    Observe: each shows its name, its project path with your home as `~`,
-   and a composer; `mirror conversations` has not changed.
-3. **The first send opens the Journey where it says.** Type a short prompt
-   in `<first>` and press Enter.
+   and a composer; run both listings again: unchanged.
+3. **The first send opens the Journey where it says.** In `<first>`, send
+   `Reply with the single word: pong`.
    Observe: a muted "Opening in …" line, then the answer streams; the
    header now shows the session's path, model and thinking level;
-   `mirror conversations` shows one new conversation under `<first>`.
+   `mirror conversations --journey <first> --limit 3` shows one new
+   conversation at the top, tagged `[<first>]`.
 4. **Switching keeps the conversation, the draft and the marker.** Type
-   half a prompt in `<first>` without sending; send a prompt in `<second>`;
-   while it streams, click `<first>`.
-   Observe: `<second>`'s sidebar item is marked as working until its answer
+   half a prompt in `<first>` without sending. In `<second>`, send
+   `Count from 1 to 40, one number per line.` and, while it streams, click
+   `<first>`.
+   Observe: `<second>`'s sidebar item shows a spinner until its answer
    settles; `<first>` shows its earlier answer and your half-typed draft;
-   back in `<second>`, the whole answer is there. `mirror conversations`
-   shows one conversation under each Journey, each with its own prompt.
-5. **A Journey without a project path says how to get one.** Pick one (or
-   record `mirror journeys`, clear a scratch Journey's path with
-   `mirror journey set-path <slug> ""`, and restore it from the record
-   after).
-   Observe: the area says it has no project path yet and shows the command;
-   there is no composer.
+   back in `<second>`, the whole count is there.
+   `mirror conversations --journey <second> --limit 3` shows one new
+   conversation, tagged `[<second>]`, and `<first>`'s listing gained
+   nothing.
+5. **A Journey without a project path says how to get one.** Pick an
+   active Journey with no project path; five had none on 2026-10-21:
+   `campos-houses`, `flip`, `kia`, `niteroi-apartment` and `real-estate`.
+   (The CLI cannot clear a path: `mirror journey set-path <slug> ""` stops
+   at its usage line.)
+   Observe: the area says it has no project path yet and shows the
+   `set-path` command; there is no composer; Refresh asks Mirror again,
+   with the list staying on screen.
 6. **The host cannot be reached.** Not reproducible by hand in this build:
    the shell starts its own host on a port of its own, so nothing outside
    can hold that port, and a host that never starts leaves the app waiting
