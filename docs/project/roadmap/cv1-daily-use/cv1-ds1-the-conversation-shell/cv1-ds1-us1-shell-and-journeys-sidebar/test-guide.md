@@ -234,3 +234,8 @@ a muted row, in place. The bundle runs its own embedded Node, which does not
 change under a running app. Restarting the app after a Node upgrade clears
 it. Captured as
 [CR002](../../../../refinement/rs002-host-runtime/cr002-after-a-node-upgrade-the-running-host-spawns-a-node-that-no-longer-exists.md).
+
+**After the debt payment** (`b3b6da9`): the gate is green with 148 tests (12
+in `node`, 136 in `desktop`), and so are the shuffled seeds 20261022, 3 and
+7. The payment changed tests and the structure of `Shell.tsx`, not behavior:
+the sixteen UI tests that pin the conversation area pass unchanged.
