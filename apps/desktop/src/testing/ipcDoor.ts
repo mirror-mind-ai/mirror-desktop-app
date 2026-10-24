@@ -6,8 +6,12 @@
 // (`host_endpoint`, when a fake host is served) and records every call with
 // its arguments. Anything else is refused and recorded: refusing alone would
 // not do, because the UI catches and toasts a rejected command.
+//
+// The door also stands up the app's one window, "main": Tauri's window API
+// reads the current window's label from metadata that the IPC mock alone does
+// not set, so without it every window call would throw before reaching the door.
 
-import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
+import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 
 import { log } from "./traffic.ts";
 import { record } from "./violations.ts";
@@ -35,6 +39,7 @@ export function openIpcDoor(): void {
     log(`ipc ${command}`);
     return handler(args);
   });
+  mockWindows("main");
 }
 
 /** Answer `command` with `handler` for the rest of the test. */

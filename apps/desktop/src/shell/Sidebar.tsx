@@ -5,12 +5,13 @@ import { isWorking, selectJourney, useConversations } from "../conversations/sto
 import { useHost } from "../host/store.ts";
 import { useJourneys } from "../journeys/store.ts";
 import { type JourneyNode, journeyTree } from "../journeys/tree.ts";
+import { AppearanceControl } from "./AppearanceControl.tsx";
 import { RefreshJourneys } from "./RefreshJourneys.tsx";
 
 /**
  * The Journeys sidebar: the active Journeys nested as Mirror nests them, the
  * current one marked and a working one saying so; below them, what the person
- * acts on (signing in) and the host's versions, behind About.
+ * acts on (signing in, the appearance) and the host's versions, behind About.
  *
  * A nested list with aria-level, not an ARIA tree: a tree promises arrow-key
  * navigation, which this story does not build.
@@ -151,6 +152,7 @@ function SidebarFooter({ onSignIn }: { onSignIn: () => void }) {
           <KeyRound className="size-3.5" aria-hidden="true" /> Sign in
         </button>
         <span className="flex-1" />
+        <AppearanceControl />
         <button
           type="button"
           aria-expanded={about}
