@@ -72,6 +72,15 @@ and the Navigator's rulings; see [plan-review.md](plan-review.md).
 | D9 | Following the stream | **The view follows while it is at the bottom (within 24 px); a scroll event off the bottom holds it; a "Jump to latest" button floats at the transcript's bottom edge while not following; activating it scrolls to the end and resumes following.** The scroll is instant (`behavior: auto`), as today, so the follow flag never reads a view mid-animation. The button sits on the raised ground inside a hairline, legible over any content. A conversation mounts at the bottom; switching Journeys remounts the conversation (the shell keys it), so it opens at the latest. |
 | D10 | Where it lives | **`apps/desktop/src/transcript/`**: the transcript's rendering as its own concern (`Transcript.tsx`, `TranscriptRow.tsx`, `Markdown.tsx`, `CodeBlock.tsx`, `ToolRow.tsx`, `Thinking.tsx`, `Notice.tsx`, `format.ts`, `follow.ts`; as built, also `codeTree.ts` for the passes around highlighting, `links.ts` for the link rules and `following.ts` for the flag thinking reads), moved out of `shell/`, which keeps the chrome and `Pulse`, imported across. The reducer stays in `conversations/transcript.ts`: it is the store's, and `transcript/` depends on it one way. |
 
+**Validation, 2026-10-24.** Reading the transcript beside Pi, the
+Navigator's captures showed three styles Pi's renderer adds that this plan
+had not carried, each confirmed in Pi's source: a first-level heading
+underlined, a quote in italic, a bullet drawn `- `. Ruled: the transcript
+draws them (89ffff6). Two differences stay, recorded in D16: Pi's `### `
+before deeper headings, hidden by the Navigator's rule that no Markdown
+syntax shows as text; and highlight.js 11 coloring tokens 10 left alone (a
+method's name, a call, an object's key), the mapping's rule kept as it is.
+
 ## Scope
 
 1. **The tokens.** Added to `app.css` in `@theme` and `.light`, each tagged

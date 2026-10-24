@@ -215,10 +215,13 @@ and `rehype-highlight` 7.0.2 (highlight.js 11, through `lowlight`), pinned
 exactly. D11 named `react-markdown`; GFM is where tables and strikethrough
 live; highlight.js is the engine Pi highlights with. Each element takes the
 role Pi's `getMarkdownTheme()` gives it, as a token carried from Pi's theme
-files (D15). Headings stay at the one reading size and differ by color,
-weight and the air above them, because Pi has no size scale. A paragraph
-keeps its soft line breaks and a code block wraps its long lines, as Pi's
-terminal does.
+files (D15), and the style Pi's renderer adds: a first-level heading
+underlined, a quote in italic, a bullet drawn `- `. Headings stay at the one
+reading size, because Pi has no size scale; below the first level they
+differ by the air above them. Pi prints `### ` before the third level and
+deeper; the transcript does not, by the Navigator's rule that no Markdown
+syntax shows as text. A paragraph keeps its soft line breaks and a code
+block wraps its long lines, as Pi's terminal does.
 
 Code is highlighted only when the fence names a language highlight.js
 knows: Pi never guesses one, because auto-detection colors prose. Any other
@@ -226,8 +229,11 @@ block is in Pi's code-block color. Pi's mapping from token to role, keyed
 for the highlight.js 10 that Pi runs, is carried by each class's first name;
 where 10 and 11 name the same token differently, by what Pi draws, read
 from Pi's own `highlightCode`: a class name in the function color, `this` in
-the type color. A tool call takes Pi's generic folded form, its constants
-carried in `transcript/format.ts`.
+the type color. Highlight.js 11 also marks tokens 10 left alone (a method's
+name, a function call, an object's key), so the transcript colors them where
+Pi leaves them in ink. The Navigator ruled at validation to keep the rule
+rather than narrow it to what 10 marked. A tool call takes Pi's generic
+folded form, its constants carried in `transcript/format.ts`.
 
 The text is a model's, and the model reads files, tool output and pages an
 attacker can shape, so the transcript treats it as input:

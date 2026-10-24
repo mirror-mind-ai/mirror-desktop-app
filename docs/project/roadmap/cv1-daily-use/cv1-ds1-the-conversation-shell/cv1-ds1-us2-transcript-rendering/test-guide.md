@@ -101,4 +101,39 @@ grammars and the unified tree, and Vite now warns about a chunk over
 500 KB. TD-001's trigger did not fire: every fixture's assistant message
 has one text block.
 
-**Navigator.** Pending: the route above, in the real app.
+**Navigator, 2026-10-24: accepted.** The Navigator ran the route in the
+real app beside Pi in iTerm and accepted it, with eighteen captures in both
+themes:
+
+- step 1, on Automation (`anthropic/claude-fable-5`, thinking max): each
+  Markdown element in Pi's role, the TypeScript block highlighted with its
+  120-character line wrapped, the plain block green on the raised ground,
+  the table, the quote; no `**`, `#` or backtick shown;
+- step 2: the Copy button on hover; step 3: the URL as the link's tooltip;
+- step 4, on Automation, where the route's path does not exist: both calls
+  failed, ✗ on the error ground in both themes; then on Mirror Desktop:
+  ✓ on the success ground with ten lines and "… 7 more lines" (17 entries),
+  ✗ on the error ground for the missing path;
+- step 6: "Jump to latest" floating while the view is held, in both themes;
+- step 7, Wi-Fi off mid-answer: "Provider error · terminated", then "Retry
+  1 of 3 · terminated · retrying in 2s", alternating up to "Retry 3 of 3"
+  (8s) and a last "Provider error · Connection error.", in red and yellow,
+  in both themes; Pi's own terminal showed the same failure;
+- step 8: every element legible on the light canvas;
+- beyond the route: a link whose text names `github.com/pi` and points to
+  `example.com` shows "(example.com)"; `<b>bold?</b>` shows as text and an
+  image as "[chart]".
+
+Accepted without a capture: Copied and the exact paste (step 2), the click
+opening the browser (step 3), opening and folding a call (step 4), thinking
+open while it streams and folding when the answer begins (step 5), and
+following again after "Jump to latest" and to the end of an answer left
+alone (step 6).
+
+The captures beside Pi showed three styles the transcript had not carried:
+an underlined first-level heading, an italic quote, the `- ` bullet. By the
+Navigator's ruling they were drawn after the route (89ffff6), proven by the
+Markdown test; the gate stayed green, 248 tests. Two differences stay by
+ruling, recorded in D16: Pi's `### ` before deeper headings, hidden; and
+highlight.js 11 coloring a method's name, a call and an object's key, which
+Pi's highlight.js 10 left in ink.
