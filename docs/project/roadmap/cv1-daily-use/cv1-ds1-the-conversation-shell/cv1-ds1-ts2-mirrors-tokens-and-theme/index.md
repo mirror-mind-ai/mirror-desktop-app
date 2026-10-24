@@ -2,7 +2,7 @@
 
 # CV1.DS1.TS2 — Mirror's tokens and theme
 
-**Status:** 🟡 Planned
+**Status:** ✅ Done — 2026-10-24
 **Type:** Technical Story
 **Split from:** [CV1.DS1.US1](../cv1-ds1-us1-shell-and-journeys-sidebar/index.md), on its [plan review](../cv1-ds1-us1-shell-and-journeys-sidebar/plan-review.md)
 
