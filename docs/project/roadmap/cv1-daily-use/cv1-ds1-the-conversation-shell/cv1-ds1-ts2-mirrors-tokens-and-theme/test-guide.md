@@ -96,4 +96,24 @@ shuffle seeds 1, 2 and 3; `npm run bundle` built the `.app` and the `.dmg`
 in 1 min 28 s. The scanner's self-test catches what it should, and the scan
 of the app's sources finds nothing; every US1 test passed unchanged.
 
-The Navigator's validation is recorded when it runs.
+**Navigator, 2026-10-24: accepted.** The Navigator ran the route in the
+real app and accepted it, with nine captures:
+
+- dark beside Pi in iTerm on a real conversation: the face, the weight and
+  the ground read as Pi's; the answer's Markdown table shows as source, which
+  is US2's;
+- Flip, without a project path, in both themes: the reason, the `set-path`
+  command and Refresh, no composer;
+- the sign-in panel, and an API-key flow with the pulse beside its title, in
+  both themes;
+- "Sign-in cancelled." as a toast at the top right, below the header, on
+  the raised ground with the danger icon, in both themes;
+- the hover overlay on rows over both sidebars, the selection fill and bold
+  on the current row, and "Mirror TypeScript Core Port" whole in the
+  288 px sidebar.
+
+The launch, the control's cycle, the OS following and the relaunch were
+accepted without captures. Not manually verified, accepted on their UI
+tests and the token scan: the sidebar empty and failed, host unreachable,
+and a failed open. The captures show two flaws in sign-in, taken to Debt
+Review.
