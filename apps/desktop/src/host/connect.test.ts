@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useConversations } from "../conversations/store.ts";
 import { useJourneys } from "../journeys/store.ts";
 import { resetAllStores } from "../stores/registry.ts";
-import { type HostConnection, HostRequestError } from "./client.ts";
+import { ConnectionLostError, type HostConnection, HostRequestError } from "./client.ts";
 import { type ConnectionLease, connectToHost } from "./connect.ts";
 import { signedIn, tryHostAgain, useHost } from "./store.ts";
 
@@ -16,6 +16,7 @@ function stubHost(answers: Partial<Record<ClientRequestBody["type"], () => Promi
   const state = { closed: false };
   const client: HostConnection = {
     onEvent: () => {},
+    onClose: () => {},
     close: () => {
       state.closed = true;
     },
@@ -130,6 +131,40 @@ describe("connecting to the host", () => {
     await connecting;
     expect(useHost.getState().status).toBe("connected");
     expect(requests).toEqual(["models.available"]);
+  });
+
+  it("reports a connection lost after the host was ready, and settles the conversations", async () => {
+    const { client } = healthy();
+    await connectToHost(async () => ({ client, host: identity }), lease());
+    useConversations.setState({ entries: { garden: { status: "open", draft: "", rows: [], running: true, session: { id: "session-1", cwd: "/Users/test/garden", thinkingLevel: "medium" } } } });
+
+    client.onClose(new ConnectionLostError(false, 1006, ""));
+    expect(useHost.getState()).toMatchObject({ status: "failed", client: null, failure: "The connection to the host was lost.", lostAfterReady: true });
+    expect(useConversations.getState().entries["garden"]?.running).toBe(false);
+  });
+
+  it("reports nothing for a close after the lease was given up", async () => {
+    const { client } = healthy();
+    const held = lease();
+    await connectToHost(async () => ({ client, host: identity }), held);
+    held.cancelled = true;
+    client.onClose(new ConnectionLostError(true, 1000, ""));
+    expect(useHost.getState().status).toBe("ready");
+  });
+
+  it("leaves a close before ready to the request it fails: one report, not two", async () => {
+    let failModels: (error: Error) => void = () => {};
+    const { client } = stubHost({
+      "models.available": () => new Promise((_resolve, reject) => (failModels = reject)),
+    });
+    const connecting = connectToHost(async () => ({ client, host: identity }), lease());
+    await vi.waitFor(() => expect(useHost.getState().status).toBe("connected"));
+    const lost = new ConnectionLostError(false, 1006, "");
+    client.onClose(lost);
+    expect(useHost.getState().status).toBe("connected");
+    failModels(lost);
+    await connecting;
+    expect(useHost.getState()).toMatchObject({ status: "failed", failure: "The connection to the host was lost.", lostAfterReady: false });
   });
 
   it("starts again from connecting on Try again, with the attempt counted", async () => {

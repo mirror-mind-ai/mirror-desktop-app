@@ -3,7 +3,9 @@
 // The shell reads one status. While the host is connecting or connected the
 // app waits; once it is ready the person can work, with or without a model;
 // when it failed, the shell says so in place of everything else and offers to
-// try again, because without the host nothing in the app can work.
+// try again, because without the host nothing in the app can work. A host
+// that was ready and then went away is the same failure, with one more thing
+// to say: a conversation was cut off, and nothing brings the host back today.
 
 import type { HostIdentity } from "@mirror-desktop/protocol";
 import { create } from "zustand";
@@ -28,6 +30,8 @@ export interface HostState {
   /** Whether any model can be used right now. Meaningful once ready. */
   readonly canUseModels: boolean;
   readonly failure: string | null;
+  /** The failure came after the host was ready: the person was working, and what they had on screen is gone. */
+  readonly lostAfterReady: boolean;
   /** Counts the person's Try agains: the shell connects again whenever it changes. */
   readonly attempt: number;
 }
@@ -38,6 +42,7 @@ const initialState: HostState = {
   identity: null,
   canUseModels: false,
   failure: null,
+  lostAfterReady: false,
   attempt: 0,
 };
 
@@ -56,7 +61,13 @@ export function hostReady(client: HostConnection, canUseModels: boolean): void {
 }
 
 export function hostFailed(failure: string): void {
-  useHost.setState({ status: "failed", client: null, failure });
+  useHost.setState({ status: "failed", client: null, failure, lostAfterReady: false });
+}
+
+/** The connection ended after the host was ready. Ignored from a connection the shell has since replaced. */
+export function hostLost(client: HostConnection, failure: string): void {
+  if (useHost.getState().client !== client) return;
+  useHost.setState({ status: "failed", client: null, failure, lostAfterReady: true });
 }
 
 /** The person asked to connect again. */

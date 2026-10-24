@@ -8,7 +8,7 @@ import { loadJourneys, useJourneys } from "./store.ts";
 const garden: Journey = { id: "garden", name: "Garden", status: "active", description: "", projectPath: "/Users/test/garden" };
 
 function stubHost(answer: (body: ClientRequestBody) => Promise<HostResultBody>): HostConnection {
-  return { onEvent: () => {}, close: () => {}, request: answer };
+  return { onEvent: () => {}, onClose: () => {}, close: () => {}, request: answer };
 }
 
 beforeEach(() => resetAllStores());

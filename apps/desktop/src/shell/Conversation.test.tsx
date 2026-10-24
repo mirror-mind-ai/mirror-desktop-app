@@ -175,3 +175,75 @@ describe("a Journey's conversation", () => {
     await screen.findByRole("button", { name: "Garden", busy: false });
   });
 });
+
+describe("the host going away", () => {
+  const lost = "The connection to the host was lost.";
+  const cutOff = "Pi was cut off mid-conversation. Relaunch Mirror Desktop to continue.";
+
+  it("says so in place of a streaming conversation, once; and after a reconnection the answer stands, settled", async () => {
+    const host = serveFakeHost({
+      models: [model],
+      journeys: [garden],
+      turns: [{ prompt: "Hello", events: streamedAnswer, held: true }],
+    });
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "Garden" }));
+    await user.type(messageBox(), "Hello{Enter}");
+    await screen.findByRole("button", { name: "Stop" });
+    host.heldTurn().releaseThrough((event) => event.type === "text_delta" && event.delta === "turn slowly\n");
+    await within(transcript()).findByText(/^Tides turn slowly/, { selector: "p" });
+    await user.type(messageBox(), "Next");
+
+    host.goAway();
+    await screen.findByRole("heading", { name: "The host could not be reached" });
+    expect(screen.getAllByText(lost)).toHaveLength(1);
+    expect(screen.getByText(cutOff)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
+
+    serveFakeHost({ models: [model], journeys: [garden], turns: [] });
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(await screen.findByRole("button", { name: "Garden" }));
+    expect(within(transcript()).getByText("Hello")).toBeTruthy();
+    expect(within(transcript()).getByText(/^Tides turn slowly/, { selector: "p" })).toBeTruthy();
+    expect(within(transcript()).getByText("Connection lost").parentElement?.textContent).toBe(
+      "Connection lost · The connection to the host was lost while Pi was answering.",
+    );
+    expect(screen.getByRole("button", { name: "Send" })).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("");
+    expect(messageBox().value).toBe("Next");
+  });
+
+  it("gives back a message whose session was opening, and names the loss as why the open failed", async () => {
+    const host = serveFakeHost({ models: [model], journeys: [garden], turns: [], heldOpens: ["garden"] });
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "Garden" }));
+    await user.type(messageBox(), "Hello{Enter}");
+    await screen.findByText("Opening in ~/garden…");
+
+    host.goAway();
+    await screen.findByRole("heading", { name: "The host could not be reached" });
+    expect(screen.getAllByText(lost)).toHaveLength(1);
+
+    serveFakeHost({ models: [model], journeys: [garden], turns: [] });
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(await screen.findByRole("button", { name: "Garden" }));
+    expect(messageBox().value).toBe("Hello");
+    expect(within(transcript()).queryByText("Hello")).toBeNull();
+    expect(screen.getByText("The session could not open in ~/garden.")).toBeTruthy();
+    expect(screen.getByText(lost)).toBeTruthy();
+  });
+
+  it("keeps US1's words for a host that never came up", async () => {
+    const unauthorized = { code: "unauthorized", message: "The host did not recognize this token." } as const;
+    serveFakeHost({ models: [model], journeys: [garden], turns: [], failures: [{ request: "hello", error: unauthorized }] });
+    renderApp();
+    await screen.findByRole("heading", { name: "The host could not be reached" });
+    expect(screen.queryByText(cutOff)).toBeNull();
+  });
+});

@@ -3,10 +3,14 @@ import { tryHostAgain, useHost } from "../host/store.ts";
 /**
  * Without the host nothing in the app can work, so this takes the whole
  * conversation area: what happened, the host's own words, and a way to try
- * again. Reconnecting on its own is CV1.DS2's.
+ * again. When the host was ready and went away, the person was working: one
+ * more line says the conversation was cut off and, since nothing brings the
+ * host back today, that relaunching is the way to continue. Try again stays,
+ * and reports its failure by name. Reconnecting on its own is CV1.DS2's.
  */
 export function HostUnreachable() {
   const failure = useHost((state) => state.failure);
+  const lostAfterReady = useHost((state) => state.lostAfterReady);
   return (
     <div className="flex flex-1 items-center justify-center p-8">
       <div className="flex max-w-md flex-col gap-3">
@@ -15,6 +19,7 @@ export function HostUnreachable() {
           Mirror Desktop reaches Pi and Mirror through its host. Until the host answers, nothing here can work.
         </p>
         {failure ? <p className="font-mono text-ui break-words text-muted">{failure}</p> : null}
+        {lostAfterReady ? <p className="text-body text-muted">Pi was cut off mid-conversation. Relaunch Mirror Desktop to continue.</p> : null}
         <button
           type="button"
           onClick={tryHostAgain}

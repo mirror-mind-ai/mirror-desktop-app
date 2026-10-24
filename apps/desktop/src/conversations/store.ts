@@ -17,7 +17,7 @@ import { create } from "zustand";
 
 import { failureOf, type HostConnection } from "../host/client.ts";
 import { registerStore } from "../stores/registry.ts";
-import { extensionNotice, reduceRows, type Row } from "./transcript.ts";
+import { connectionLostNotice, extensionNotice, reduceRows, type Row } from "./transcript.ts";
 
 export interface Session {
   readonly id: string;
@@ -92,7 +92,8 @@ export function setDraft(journeyId: string, draft: string): void {
  * A failed open is a standing state, shown in the conversation; the message
  * goes back into the draft, so sending again retries. A refused prompt is a
  * failed action: it is rolled back the same way, and the returned promise
- * rejects so the composer can say why.
+ * rejects so the composer can say why, unless what refused it was the
+ * connection's loss, which the shell says in the composer's place.
  */
 export async function send(client: HostConnection, journeyId: string): Promise<void> {
   const mine = epoch;
@@ -141,6 +142,7 @@ export async function send(client: HostConnection, journeyId: string): Promise<v
   } catch (error) {
     if (mine !== epoch) return;
     update(journeyId, (conversation) => ({ ...takeBack(conversation), running: false }));
+    if (failureOf(error).code === "connection_lost") return;
     throw error;
   }
 }
@@ -154,6 +156,28 @@ export async function abort(client: HostConnection, journeyId: string): Promise<
   const conversation = useConversations.getState().entries[journeyId];
   if (!conversation?.session || !conversation.running) return;
   await client.request({ type: "session.abort", sessionId: conversation.session.id }).catch(() => undefined);
+}
+
+/**
+ * The connection to the host ended. A conversation whose answer was
+ * streaming has nothing pending to reject (the prompt was answered before
+ * the first event), so it is settled here: not running, and a notice after
+ * the partial answer saying why it stopped. A send still waiting on the
+ * host is settled by its own rejection. Every other conversation is left as
+ * it is. The sessions these conversations hold are the old host's; what a
+ * reconnected UI does with them is CV1.DS2.TS1's.
+ */
+export function connectionLost(): void {
+  useConversations.setState((state) => ({
+    entries: Object.fromEntries(
+      Object.entries(state.entries).map(([journeyId, conversation]) => [
+        journeyId,
+        conversation.running && conversation.status === "open"
+          ? { ...conversation, running: false, rows: [...conversation.rows, connectionLostNotice()] }
+          : conversation,
+      ]),
+    ),
+  }));
 }
 
 /** Fold a host event into the conversation whose session it names. */

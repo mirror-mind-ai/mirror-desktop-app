@@ -93,6 +93,11 @@ export function providerErrorNotice(message: string): NoticeRow {
 }
 
 /** An extension failed inside Pi; the turn goes on. */
+/** The connection to the host ended while this conversation was answering: the answer stops where it was. */
+export function connectionLostNotice(): NoticeRow {
+  return { kind: "notice", name: "Connection lost", tone: "notice", text: "The connection to the host was lost while Pi was answering." };
+}
+
 export function extensionNotice(failure: { extension: string; event: string; message: string }): NoticeRow {
   return { kind: "notice", name: "Extension failed", tone: "notice", text: `${failure.extension} on ${failure.event}: ${failure.message}` };
 }

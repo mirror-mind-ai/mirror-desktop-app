@@ -10,13 +10,18 @@
 // connections feeding one screen rendered every delta twice in the spike.
 // The lease says when that has happened, and every step checks it after it
 // waits.
+//
+// A connection that ends after the host was ready is reported by its close:
+// the host failed, after ready, and the conversations settle what was
+// answering. Before ready, the step that was waiting reports it through its
+// own rejection, so the close is left to it: one report, not two.
 
 import type { HostIdentity } from "@mirror-desktop/protocol";
 
-import { applyHostEvent } from "../conversations/store.ts";
+import { applyHostEvent, connectionLost } from "../conversations/store.ts";
 import { loadJourneys } from "../journeys/store.ts";
 import { failureOf, type HostConnection } from "./client.ts";
-import { hostConnected, hostFailed, hostReady } from "./store.ts";
+import { hostConnected, hostFailed, hostLost, hostReady } from "./store.ts";
 
 export interface ConnectionLease {
   /** Set by whoever started the connection once they no longer want it. */
@@ -56,5 +61,10 @@ export async function connectToHost(
   }
   if (lease.cancelled) return;
   hostReady(client, canUseModels);
+  client.onClose = (lost) => {
+    if (lease.cancelled) return;
+    hostLost(client, lost.message);
+    connectionLost();
+  };
   await loadJourneys(client);
 }

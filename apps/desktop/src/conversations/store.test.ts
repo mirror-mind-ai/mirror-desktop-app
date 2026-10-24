@@ -1,11 +1,12 @@
 import type { ClientRequestBody, HostEvent, HostResultBody, SessionEvent } from "@mirror-desktop/protocol";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { type HostConnection, HostRequestError } from "../host/client.ts";
+import { ConnectionLostError, type HostConnection, HostRequestError } from "../host/client.ts";
 import { resetAllStores } from "../stores/registry.ts";
 import {
   abort,
   applyHostEvent,
+  connectionLost,
   type Conversation,
   isWorking,
   selectJourney,
@@ -35,6 +36,7 @@ function stubHost(answer: (body: ClientRequestBody) => Promise<HostResultBody>) 
   const requests: ClientRequestBody[] = [];
   const client: HostConnection = {
     onEvent: () => {},
+    onClose: () => {},
     close: () => {},
     request: (body) => {
       requests.push(body);
@@ -218,6 +220,17 @@ describe("sending", () => {
     expect(entry("garden")).toMatchObject({ status: "open", running: false, rows: [], draft: "Hello" });
   });
 
+  it("rolls back a prompt the connection's loss refused, without rejecting: the shell says that one", async () => {
+    const { client } = stubHost(async (body) => {
+      if (body.type === "session.open") return opened("session-1", "garden");
+      throw new ConnectionLostError(false, 1006, "");
+    });
+    selectJourney("garden");
+    setDraft("garden", "Hello");
+    await expect(send(client, "garden")).resolves.toBeUndefined();
+    expect(entry("garden")).toMatchObject({ status: "open", running: false, rows: [], draft: "Hello" });
+  });
+
   it("keeps a new draft typed while the open was failing, rather than overwrite it", async () => {
     const open = deferred<HostResultBody>();
     const { client } = stubHost(() => open.promise);
@@ -330,6 +343,29 @@ describe("stopping", () => {
     });
     await sendInto(client, "garden", "Hello");
     await expect(abort(client, "garden")).resolves.toBeUndefined();
+  });
+});
+
+describe("the connection lost", () => {
+  it("settles every answering conversation with a notice after the partial answer, and leaves the rest alone", async () => {
+    const { client } = openingHost();
+    await sendInto(client, "garden", "Hello");
+    await sendInto(client, "beds", "Plant");
+    applyHostEvent(event("session-1", { type: "message_start", role: "assistant" }));
+    applyHostEvent(event("session-1", { type: "text_delta", delta: "Good mor" }));
+    applyHostEvent(event("session-2", { type: "agent_settled", aborted: false }));
+    selectJourney("attic");
+    setDraft("attic", "Later");
+
+    connectionLost();
+    expect(entry("garden")).toMatchObject({ status: "open", running: false });
+    expect(entry("garden")?.rows.slice(-2)).toEqual([
+      { kind: "assistant", text: "Good mor", thinking: "", done: false },
+      { kind: "notice", name: "Connection lost", tone: "notice", text: "The connection to the host was lost while Pi was answering." },
+    ]);
+    expect(entry("beds")).toMatchObject({ status: "open", running: false });
+    expect(entry("beds")?.rows.some((row) => row.kind === "notice")).toBe(false);
+    expect(entry("attic")).toEqual({ status: "idle", draft: "Later", rows: [], running: false });
   });
 });
 

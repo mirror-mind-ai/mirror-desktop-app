@@ -4,9 +4,15 @@ import { CheckCircle2, ExternalLink, KeyRound, LogIn, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import type { HostConnection } from "./host/client.ts";
+import { failureOf, type HostConnection } from "./host/client.ts";
 import { ACCENT_BUTTON } from "./shell/buttons.ts";
 import { Pulse } from "./shell/Pulse.tsx";
+
+/** A failed sign-in step, said once as a toast; a lost connection is said by the shell instead. */
+function saidAsToast(error: unknown): void {
+  const failure = failureOf(error);
+  if (failure.code !== "connection_lost") toast.error(failure.message);
+}
 
 /**
  * Sign in to a model provider. Pi runs the flow in the host; this screen
@@ -47,7 +53,7 @@ export function SignIn({
   }
 
   useEffect(() => {
-    void refresh().catch((error: unknown) => toast.error(error instanceof Error ? error.message : String(error)));
+    void refresh().catch(saidAsToast);
     const previous = client.onEvent;
     client.onEvent = (event: HostEvent) => {
       previous(event);
@@ -76,7 +82,7 @@ export function SignIn({
       await refresh();
       onSignedIn();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
+      saidAsToast(error);
       setFlow(null);
     }
   }
