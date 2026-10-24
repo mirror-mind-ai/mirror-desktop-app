@@ -62,13 +62,15 @@ Then every --color-* token the theme defines, the light block overrides
 - The alarm scale as tokens: muted, notice, danger. US1 already shows open
   diagnostics muted.
 - The theme store and control, `localStorage` persistence, the synchronous
-  apply in `main.tsx`, the `useTheme` effect with cleanup, the window
-  background matching the shell token, `sonner` on the tokens.
+  boot before the first render in `main.tsx` (and in the tests'
+  `renderApp()`), the `syncTheme` effect in `App` with cleanup, the window
+  told its canvas and appearance, `sonner` on the tokens.
 - Chrome on the tokens. US1 placed it: "Sign in" in the footer, the
   versions behind About, and no Sparkles or Compass; TS2 gives it its look,
   the appearance control among it.
-- Harness: ambient theme state cleared per test in `setup.ts`; happy-dom's
-  `change` dispatch verified or polyfilled.
+- Harness: ambient theme state cleared per test in `setup.ts`; happy-dom
+  fires a media query's `change` only on a resize re-check, so tests flip
+  the OS through `setSystemAppearance`, with no polyfill.
 
 ## Out Of Scope
 
