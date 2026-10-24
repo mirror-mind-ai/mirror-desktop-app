@@ -123,3 +123,10 @@ npm run build && git diff --check`: green, 191 tests (12 node, 179
 desktop), the two new ones holding the toasts' override to the names sonner
 declares, shown red by renaming one in `app.css`; the desktop project green
 under shuffle seeds 1, 2 and 3; the bundle rebuilt.
+
+**The payment, seen by the Navigator, 2026-10-24.** Nine captures, both
+themes: Anthropic's and GitHub Copilot's rows keep their status on one line
+and put their buttons on a second; during an API-key flow and a select
+prompt, the OAuth buttons and Continue keep a hairline outline in dim text;
+Send is an outline at rest and the violet fill once there is a draft. The
+Navigator found nothing else to do in the story.
