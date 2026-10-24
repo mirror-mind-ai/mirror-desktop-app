@@ -78,4 +78,33 @@ its words twice.
 
 ## Validation Evidence
 
-Pending implementation and validation.
+**Automated, 2026-10-25.** `npm run typecheck && npm test && npm run build
+&& git diff --check`: green, 270 tests (12 node, 258 desktop, 22 of them
+new); the desktop project green under shuffle seeds 1, 2 and 3; the bundle
+750 KB (gzip 226.5 KB), 6 KB over US2's, no new chunk. Each rule the story
+stands on was broken once by hand and its test failed by name: the
+`repeat`, `isComposing` and `defaultPrevented` guards on Escape, each
+removed in turn; the lease guard on the close hook; the client's
+`closedByUs` flag; the conversations' settling on the loss; and
+`lostAfterReady`. Each file was restored.
+
+What changed in tests that existed: the three connection stubs
+(`connect.test.ts`, `conversations/store.test.ts`, `journeys/store.test.ts`)
+carry `onClose`, since `HostConnection` now picks it. No other test
+changed. The composer's own tests are in a new `Composer.test.tsx`;
+`Conversation.test.tsx` keeps the conversation's states and gains the host
+going away.
+
+Found while building, and settled within the plan: a `role="status"`
+region is the one place the composer speaks, so the Enter-while-opening
+test reads it empty; the "no toast on a lost connection" rule moved from
+the composer's catch into `send()`, where the store test proves it (the
+composer's branch could not be reached by a UI test, since the prompt's
+reply cannot be held); the sign-in panel keeps its own copy of the rule,
+unproven as its flows are (TD-002). The host store's `lostAfterReady` is
+what the notice's line reads.
+
+For Debt Review: TD-004 is already written (what a reconnection finds),
+and TD-002 extended for `onClose`. `goAway()` settles a held open but not
+a held turn: a turn scripted and never prompted is a test's mistake
+regardless of the host, so it stays named at teardown.
