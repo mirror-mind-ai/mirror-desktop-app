@@ -199,3 +199,9 @@ what the stylesheet defines. CV1.DS1.US2 carries Pi's remaining roles
 depart from Pi, by a decision, so the stylesheet never quietly stops being
 Pi's. This refines D11's "the palette and typography are Mirror's own":
 Mirror's own, carried from Pi.
+
+One role departs already. Pi's light `muted` (`#677176`) reads 4.32:1 on the
+light canvas and 4.47:1 on the light sidebar, under the 4.5:1 Pi's own docs
+keep for body text. It is taken two points darker in OKHSL, same hue and
+saturation (`#636c71`, 4.63:1 and 4.80:1): a departure from Pi's value that
+keeps Pi's rule, decided in TS2's debt review.

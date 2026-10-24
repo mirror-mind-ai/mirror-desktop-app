@@ -117,3 +117,9 @@ accepted without captures. Not manually verified, accepted on their UI
 tests and the token scan: the sidebar empty and failed, host unreachable,
 and a failed open. The captures show two flaws in sign-in, taken to Debt
 Review.
+
+**After the debt payment, 2026-10-24.** `npm run typecheck && npm test &&
+npm run build && git diff --check`: green, 191 tests (12 node, 179
+desktop), the two new ones holding the toasts' override to the names sonner
+declares, shown red by renaming one in `app.css`; the desktop project green
+under shuffle seeds 1, 2 and 3; the bundle rebuilt.

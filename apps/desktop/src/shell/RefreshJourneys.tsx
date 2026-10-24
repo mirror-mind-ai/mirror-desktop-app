@@ -15,7 +15,7 @@ export function RefreshJourneys({ label }: { label: string }) {
       onClick={() => {
         if (client) void loadJourneys(client);
       }}
-      className="w-fit rounded-control border border-hairline px-2.5 py-1 text-ui hover:bg-hover disabled:text-dim"
+      className="w-fit rounded-control border border-hairline px-2.5 py-1 text-ui enabled:hover:bg-hover disabled:text-dim"
     >
       {label}
     </button>

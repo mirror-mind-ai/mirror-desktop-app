@@ -68,7 +68,7 @@ surfaces carry Pi's warm neutral (hue 17) under a cool blue selection;
 whether light's surfaces should move toward the dark's hue family is a
 route observation. Measured already: Pi's light `muted` on the light
 canvas is 4.3:1, under 4.5:1; it is the first candidate if light reads
-faint.
+faint. (Paid in Debt Review: `#636c71`, 4.63:1.)
 
 ## Scope
 
@@ -88,7 +88,7 @@ faint.
    | `--color-sidebar` | the sidebar | `#252537` derived, canvas +3 % L | `#f3f2f2` derived, canvas +1.5 % L |
    | `--color-raised` | composer field, code chips | `#2c2c40` derived, canvas +6 % L | `#f7f6f6` carried, Pi light `export.cardBg` |
    | `--color-ink` | body text | `#dee0e1` carried, Pi dark `text` | `#3b3f41` carried, Pi light `text` |
-   | `--color-muted` | secondary text, facts, meta | `#9da5a9` carried, Pi dark `muted` | `#677176` carried, Pi light `muted` |
+   | `--color-muted` | secondary text, facts, meta | `#9da5a9` carried, Pi dark `muted` | `#636c71` derived, Pi light `muted` (`#677176`) two points darker, to keep 4.5:1 (Debt Review, D15) |
    | `--color-dim` | disabled text (never opacity) | `#7e888e` carried, Pi dark `dim` | `#879095` carried, Pi light `dim` |
    | `--color-hairline` | the only border | `#35354c` derived, canvas +10 % L (Pi's `borderMuted` is a drawn box line, too strong at 1 px) | `#dedcdc` derived, canvas −6 % L |
    | `--color-selection` | the current row's fill | `#213b49` carried, Pi dark `selectedBg` | `#dfe7ec` carried, Pi light `selectedBg` |

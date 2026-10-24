@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import type { HostConnection } from "./host/client.ts";
+import { ACCENT_BUTTON } from "./shell/buttons.ts";
 import { Pulse } from "./shell/Pulse.tsx";
 
 /**
@@ -124,8 +125,13 @@ export function SignIn({
         ) : (
           <ul className="flex flex-col gap-2">
             {providers.map((provider) => (
-              <li key={provider.id} className="flex items-center justify-between gap-4 rounded-control border border-hairline bg-raised px-4 py-3">
-                <div className="min-w-0">
+              // Monaco is wide: a row whose sign-in button is long puts its buttons on a
+              // second line rather than squeezing the provider's status into a column.
+              <li
+                key={provider.id}
+                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-control border border-hairline bg-raised px-4 py-3"
+              >
+                <div className="min-w-0 grow basis-64">
                   <p className="text-ui font-bold">{provider.name}</p>
                   <p className="text-meta text-muted">
                     {provider.signedIn ? (
@@ -138,13 +144,13 @@ export function SignIn({
                     )}
                   </p>
                 </div>
-                <div className="flex shrink-0 gap-2">
+                <div className="ml-auto flex shrink-0 gap-2">
                   {provider.oauth ? (
                     <button
                       type="button"
                       disabled={flow !== null}
                       onClick={() => void start(provider.id, "oauth")}
-                      className="flex items-center gap-2 rounded-control bg-accent px-3 py-1.5 text-ui text-on-accent disabled:bg-raised disabled:text-dim"
+                      className={`${ACCENT_BUTTON} px-3 py-1.5`}
                     >
                       <LogIn className="size-3.5" aria-hidden="true" /> {provider.oauth.label}
                     </button>
@@ -154,7 +160,7 @@ export function SignIn({
                       type="button"
                       disabled={flow !== null}
                       onClick={() => void start(provider.id, "api_key")}
-                      className="flex items-center gap-2 rounded-control border border-hairline px-3 py-1.5 text-ui hover:bg-hover disabled:text-dim"
+                      className="flex items-center gap-2 rounded-control border border-hairline px-3 py-1.5 text-ui enabled:hover:bg-hover disabled:text-dim"
                     >
                       <KeyRound className="size-3.5" aria-hidden="true" /> API key
                     </button>
@@ -259,7 +265,7 @@ function FlowPanel({
             <button
               type="submit"
               disabled={!flow.answer.trim()}
-              className="rounded-control bg-accent px-3 py-2 text-ui text-on-accent disabled:bg-raised disabled:text-dim"
+              className={`${ACCENT_BUTTON} px-3 py-2`}
             >
               {prompt.type === "manual_code" ? "Use code" : "Continue"}
             </button>

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { abort, type Conversation, send, setDraft } from "../conversations/store.ts";
 import { failureOf } from "../host/client.ts";
 import { useHost } from "../host/store.ts";
+import { ACCENT_BUTTON } from "./buttons.ts";
 
 /**
  * The composer, moved from the spike console: Enter sends, Shift+Enter breaks
@@ -65,7 +66,7 @@ export function Composer({ journeyId, conversation }: { journeyId: string; conve
           <button
             type="submit"
             disabled={!draft.trim() || opening}
-            className="flex items-center gap-2 rounded-control bg-accent px-4 py-2 text-ui text-on-accent disabled:bg-raised disabled:text-dim"
+            className={`${ACCENT_BUTTON} px-4 py-2`}
           >
             <Send className="size-3.5" aria-hidden="true" /> Send
           </button>

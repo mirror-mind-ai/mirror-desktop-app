@@ -91,7 +91,7 @@
   --color-sidebar: #f3f2f2; /* derived: canvas +1.5 % L */
   --color-raised: #f7f6f6; /* carried: Pi light export.cardBg */
   --color-ink: #3b3f41; /* carried: Pi light text */
-  --color-muted: #677176; /* carried: Pi light muted */
+  --color-muted: #636c71; /* derived: Pi light muted (#677176) two points darker in OKHSL, L 47 -> 45 %, to keep the 4.5:1 Pi keeps for body text on this canvas (D15) */
   --color-dim: #879095; /* carried: Pi light dim */
   --color-hairline: #dedcdc; /* derived: canvas -6 % L */
   --color-selection: #dfe7ec; /* carried: Pi light selectedBg */
