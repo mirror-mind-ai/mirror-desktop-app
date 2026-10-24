@@ -119,6 +119,12 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
     A failing test prints the fake host's traffic log after it.
   - A new privileged Tauri call is scripted with `scriptIpc` and its arguments
     are asserted.
+  - The theme boots in `renderApp()` exactly as in `main.tsx`, against a
+    window whose two theme commands are answered; `windowCalls()` reads
+    what the window was told. A test flips the OS with
+    `setSystemAppearance()` (happy-dom re-checks a media query only on
+    resize). Each test starts with its own empty `localStorage`, no theme
+    class and a light system (`testing/appearance.ts`).
   - Fixtures and worlds are invented and inert: no real paths (only
     `/Users/test/`), no real session or tool text, nothing shaped like a
     secret. The loader refuses them. UI tests never enable script evaluation.

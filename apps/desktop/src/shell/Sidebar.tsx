@@ -20,7 +20,7 @@ import { RefreshJourneys } from "./RefreshJourneys.tsx";
 export function Sidebar({ onSignIn }: { onSignIn: () => void }) {
   const hostStatus = useHost((state) => state.status);
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-hairline bg-sidebar">
+    <aside className="flex w-72 shrink-0 flex-col border-r border-hairline bg-sidebar">
       {/* Clear of the traffic lights the overlay title bar draws here; the window drags by it. */}
       <div className="h-12 shrink-0" data-tauri-drag-region />
       <nav aria-label="Journeys" className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">

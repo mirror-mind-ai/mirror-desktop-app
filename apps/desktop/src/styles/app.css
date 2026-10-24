@@ -136,3 +136,22 @@ body {
 ::selection {
   background-color: var(--color-selection);
 }
+
+/*
+ * Toasts (sonner) on the tokens, in the app's face, so a toast is part of the
+ * window rather than a foreign object. Sonner injects its own stylesheet at
+ * runtime, after this one, so these selectors carry one element more than its
+ * own to win whatever the order.
+ */
+html [data-sonner-toaster][data-sonner-theme] {
+  --normal-bg: var(--color-raised);
+  --normal-border: var(--color-hairline);
+  --normal-text: var(--color-ink);
+  --border-radius: var(--radius-control);
+  font-family: var(--font-sans);
+}
+
+/* A toast is a failed action; its icon says so in the alarm's color. */
+html [data-sonner-toaster] [data-sonner-toast][data-type="error"] [data-icon] {
+  color: var(--color-danger);
+}

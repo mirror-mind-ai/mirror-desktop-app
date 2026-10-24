@@ -102,7 +102,7 @@ export function SignIn({
 
   return (
     <section className="flex flex-1 items-start justify-center overflow-y-auto p-8">
-      <div className="flex w-full max-w-2xl flex-col gap-4">
+      <div className="flex w-full max-w-measure flex-col gap-4">
         <header className="flex items-end justify-between">
           <div>
             <h1 className="text-title">Sign in to a model provider</h1>

@@ -35,7 +35,8 @@ export function App() {
   return (
     <>
       <Shell />
-      <Toaster position="bottom-right" theme={theme} />
+      {/* Top right, below the header: at the bottom a toast would cover the composer's Send. */}
+      <Toaster position="top-right" offset={{ top: 64, right: 24 }} theme={theme} />
     </>
   );
 }

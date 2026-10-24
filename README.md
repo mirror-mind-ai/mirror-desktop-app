@@ -3,6 +3,7 @@
 The first-party desktop application for [Mirror Mind](https://github.com/mirror-mind-ai/mirror):
 a place to operate Journey-bound Pi and Mirror conversations with native capabilities,
 built with Tauri 2, React and a Node host that embeds Pi and the Mirror core as libraries.
+It wears Pi's look: Monaco and Pi's own palettes, in a dark and a light theme.
 
 This repository is the successor to
 [`mirror-mind-ai/mirror-desktop`](https://github.com/mirror-mind-ai/mirror-desktop).
