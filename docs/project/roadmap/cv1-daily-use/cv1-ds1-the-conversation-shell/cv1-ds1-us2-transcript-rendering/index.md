@@ -17,9 +17,11 @@ So that I read an answer here as comfortably as in Pi, and can scroll back while
 
 An assistant answer reads as Pi draws it: headings, inline code, list
 markers, links and fenced code in Pi's own colors, carried from its theme
-files the way TS2 carried the chrome (D15); bold, italic and strikethrough as
-styles; tables with hairlines; quotes and rules muted; no Markdown syntax
-shown as text, no raw HTML ever rendered, an image as its alt text, and only
+files the way TS2 carried the chrome (D15), with the styles Pi's renderer
+adds (a first-level heading underlined, a quote in italic, a bullet drawn
+`- `); bold, italic and strikethrough as styles; tables with hairlines;
+quotes and rules muted; a paragraph's line breaks kept; no Markdown syntax
+shown as text, Pi's `### ` before deeper headings included (D16), no raw HTML ever rendered, an image as its alt text, and only
 `https` links kept, since those are the ones the app may open. A fenced block
 with a language is highlighted through Pi's own token-to-role mapping on
 highlight.js, the engine Pi uses; a block with no or an unknown language is
@@ -31,7 +33,9 @@ duration, then up to ten lines of its result — on Pi's tool ground (pending,
 success, error), and opens on its arguments in full and the whole result.
 Thinking streams muted and italic in Pi's thinking color, then folds, while
 the view is following, to a line that reopens on click. A retry, a
-provider error and an extension failure are notices with a name and a tone.
+provider error and an extension failure are notices with a name and a tone;
+a stopped message is not called a provider's error, and what a stop leaves
+is CV1.DS2's.
 The view follows the stream while the person is at the bottom; scrolling up
 holds the view, and a "Jump to latest" button brings it back and resumes
 following. Every rendering path has a UI test against the fake host, from
