@@ -17,12 +17,16 @@ So that US1's screens, and everything US2 and US3 add to them, are built on one 
 
 ## Outcome
 
-One product in two lights. Both themes derive from one accent hue (the
-predecessor's mint) and one danger hue, luminance tuned per theme, on one
-role vocabulary: canvas, sidebar, raised surface, text, muted text,
-hairline, selection, hover, accent, accent-foreground, ring, notice,
-danger. Type roles instead of one base size; radius and one motion idiom;
-a three-tier alarm scale. The theme preference (system, dark, light) is
+One product in two lights, and the look is Pi's: the reference the
+Navigator named is Pi as he reads it, Monaco in iTerm2 on `#1e1e2e` with
+Pi's `dark` palette. Both themes carry Pi's own hues (violet accent, blue
+ring and selection, red danger, yellow notice, green success) from its
+`dark` and `light` theme files, lightness tuned per theme by Pi itself, on
+one role vocabulary: canvas, sidebar, raised surface, text, muted text,
+dim text, hairline, selection, hover, accent, accent-foreground, ring,
+notice, danger, success. Monaco, which ships with macOS, is the one face.
+Type roles instead of one base size; radius and one motion idiom; a
+three-tier alarm scale. The theme preference (system, dark, light) is
 applied before the first frame, follows the OS live under `system`, and
 survives a relaunch of the built app. The spike's chrome is gone.
 
@@ -48,8 +52,9 @@ Then every --color-* token the theme defines, the light block overrides
 
 ## Scope
 
-- The slot table: every token in both blocks, each tagged carried (file and
-  theme) or derived, recorded in D11.
+- The slot table: every token in both blocks, each tagged carried (Pi's
+  theme file and theme, converted with Pi's own code) or derived (rule),
+  recorded in a decision.
 - Type roles: sidebar row, header name and facts, transcript body and meta,
   the conversation's measure.
 - State tokens: selection, hover, focus ring, disabled text level; radius
@@ -67,7 +72,9 @@ Then every --color-* token the theme defines, the light block overrides
 
 ## Out Of Scope
 
-- The predecessor's other theme families; a bundled brand font pair.
+- The predecessor's palettes and other theme families; a bundled font;
+  Pi's Markdown, syntax, tool and diff roles (US2 carries them from the
+  same files).
 - The shell's behavior, states and stores (US1).
 
 ## Validation
