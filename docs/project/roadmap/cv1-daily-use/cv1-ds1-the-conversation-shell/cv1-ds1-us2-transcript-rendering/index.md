@@ -2,7 +2,7 @@
 
 # CV1.DS1.US2 — Transcript rendering
 
-**Status:** 🟡 Planned
+**Status:** ✅ Done — 2026-10-24
 **Type:** User Story
 
 ---
