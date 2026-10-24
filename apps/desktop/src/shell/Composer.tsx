@@ -41,12 +41,15 @@ export function Composer({ journeyId, conversation }: { journeyId: string; conve
       <div className="mx-auto flex max-w-measure items-end gap-2">
         <textarea
           aria-label="Message"
+          // The conversation mounts per Journey, so picking one focuses its composer.
+          autoFocus
           className="min-h-12 flex-1 resize-none rounded-control border border-hairline bg-raised px-3 py-2 text-body text-ink outline-none placeholder:text-dim focus:border-focus"
           placeholder="Say something to Pi…"
           value={draft}
           onChange={(event) => setDraft(journeyId, event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
+            // An Enter while an IME composes (a dead key on macOS) ends the composition, not the draft.
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault();
               void submit();
             }
