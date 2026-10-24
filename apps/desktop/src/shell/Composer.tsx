@@ -1,10 +1,12 @@
 import { Send, Square } from "lucide-react";
+import { useCallback } from "react";
 import { toast } from "sonner";
 
 import { abort, type Conversation, send, setDraft } from "../conversations/store.ts";
 import { failureOf } from "../host/client.ts";
 import { useHost } from "../host/store.ts";
 import { ACCENT_BUTTON } from "./buttons.ts";
+import { useEscapeToStop } from "./useEscapeToStop.ts";
 
 /**
  * The composer, moved from the spike console: Enter sends, Shift+Enter breaks
@@ -18,6 +20,11 @@ export function Composer({ journeyId, conversation }: { journeyId: string; conve
   const draft = conversation?.draft ?? "";
   const running = conversation?.running ?? false;
   const opening = conversation?.status === "opening";
+
+  const stop = useCallback(() => {
+    if (client) void abort(client, journeyId);
+  }, [client, journeyId]);
+  useEscapeToStop(running, stop);
 
   async function submit(): Promise<void> {
     if (!client) return;
@@ -58,9 +65,9 @@ export function Composer({ journeyId, conversation }: { journeyId: string; conve
         {running ? (
           <button
             type="button"
-            onClick={() => {
-              if (client) void abort(client, journeyId);
-            }}
+            onClick={stop}
+            aria-keyshortcuts="Escape"
+            title="Stop (Escape)"
             className="flex items-center gap-2 rounded-control border border-hairline px-4 py-2 text-ui text-ink hover:bg-hover"
           >
             <Square className="size-3.5" aria-hidden="true" /> Stop
