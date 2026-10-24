@@ -56,9 +56,13 @@ Expected:
    once, the icon shows the choice, the traffic lights follow.
 3. With system chosen, switch the OS appearance in System Settings: the app
    follows.
-4. `npm run bundle --workspace apps/desktop`, launch the built app, choose
-   dark, quit, launch again with the OS in light: it opens dark. Record the
-   origin the bundle runs on.
+4. The bundle is built (2026-10-24, ad-hoc signed):
+   `apps/desktop/src-tauri/target/release/bundle/macos/Mirror Desktop.app`.
+   Launch it, choose dark, quit, launch again with the OS in light: it
+   opens dark. (To rebuild: `npm run bundle --workspace apps/desktop`.) The
+   bundle serves the UI from `tauri://localhost` and `npm run dev` from
+   `http://localhost:1421`: two origins, two storages, so a choice made in
+   one is not seen in the other.
 5. Dark beside Pi: the face, the weight and the ground, as at the
    checkpoint. The colors along the text are not judged here: they come
    with US2's Markdown.
@@ -85,4 +89,11 @@ and the transcript still printed Markdown as source. Ruling: Markdown in
 Pi's colors stays in CV1.DS1.US2, captured in its index; this story
 continues.
 
-The rest is recorded when validation runs.
+**Automated, 2026-10-24.** `npm run typecheck && npm test && npm run build
+&& git diff --check`: green, 189 tests (12 node, 177 desktop); `cargo check`
+green with the two window permissions; the desktop project green under
+shuffle seeds 1, 2 and 3; `npm run bundle` built the `.app` and the `.dmg`
+in 1 min 28 s. The scanner's self-test catches what it should, and the scan
+of the app's sources finds nothing; every US1 test passed unchanged.
+
+The Navigator's validation is recorded when it runs.
