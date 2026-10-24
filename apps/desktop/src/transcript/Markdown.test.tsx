@@ -32,9 +32,13 @@ describe("an answer's Markdown", () => {
   it("draws each element in Pi's role, and shows no Markdown syntax as text", () => {
     const { container } = render(<Markdown text={markdown} />);
 
+    // Pi underlines the first level only, so H1 and H2 tell apart as in Pi.
     const title = screen.getByRole("heading", { level: 1, name: "Tides" });
     expect(title.className).toContain("text-heading");
-    expect(screen.getByRole("heading", { level: 2, name: "Steps" }).className).toContain("text-heading");
+    expect(title.className).toContain("underline");
+    const section = screen.getByRole("heading", { level: 2, name: "Steps" });
+    expect(section.className).toContain("text-heading");
+    expect(section.className).not.toContain("underline");
     expect(screen.getByText("bold").tagName).toBe("STRONG");
     expect(screen.getByText("aside").tagName).toBe("EM");
     expect(screen.getByText("Gone").tagName).toBe("DEL");
@@ -48,8 +52,12 @@ describe("an answer's Markdown", () => {
     expect(almanac.getAttribute("title")).toBe("https://example.test/almanac");
     expect(almanac.className).toContain("text-link");
 
+    // Pi's bullet is "- ", nested lists included, in its list-marker violet.
     const [bullets, numbers] = screen.getAllByRole("list").filter((list) => list.parentElement?.tagName !== "LI");
     expect(bullets?.className).toContain("marker:text-list-marker");
+    const unordered = screen.getAllByRole("list").filter((list) => list.tagName === "UL");
+    expect(unordered).toHaveLength(2);
+    for (const list of unordered) expect(list.className).toContain("list-['-_']");
     expect(within(bullets as HTMLElement).getAllByRole("listitem").map((item) => item.firstChild?.textContent?.trim())).toEqual([
       "first",
       "second",
@@ -62,7 +70,9 @@ describe("an answer's Markdown", () => {
     expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Tide", "Hour"]);
     expect(within(table).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["high", "06:12", "low", "12:24"]);
 
-    expect(screen.getByText("Quoted shore.").closest("blockquote")?.className).toContain("text-muted");
+    const quote = screen.getByText("Quoted shore.").closest("blockquote");
+    expect(quote?.className).toContain("text-muted");
+    expect(quote?.className).toContain("italic");
     expect(screen.getByRole("separator")).toBeTruthy();
 
     const prose = [...container.querySelectorAll("h1, h2, h3, p, li, th, td, blockquote")].map((element) => element.textContent).join("\n");

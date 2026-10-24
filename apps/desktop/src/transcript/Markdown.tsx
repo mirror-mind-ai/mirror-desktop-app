@@ -45,13 +45,16 @@ const REHYPE: Options["rehypePlugins"] = [
 
 /**
  * Air, which is not a Pi role: one line between blocks (the gap), a line and
- * a half above the two top heading levels, so a section reads as one.
+ * a half above the two top heading levels, so a section reads as one. Pi
+ * underlines the first level, and so does this; it prints `### ` before the
+ * third and deeper, which this does not: no Markdown syntax shows as text
+ * (D16).
  */
 const SECTION_HEADING = "mt-3 text-body font-bold text-heading first:mt-0";
 const HEADING = "text-body font-bold text-heading";
 
 const COMPONENTS: Components = {
-  h1: ({ children }) => <h1 className={SECTION_HEADING}>{children}</h1>,
+  h1: ({ children }) => <h1 className={`${SECTION_HEADING} underline`}>{children}</h1>,
   h2: ({ children }) => <h2 className={SECTION_HEADING}>{children}</h2>,
   h3: ({ children }) => <h3 className={HEADING}>{children}</h3>,
   h4: ({ children }) => <h4 className={HEADING}>{children}</h4>,
@@ -61,9 +64,8 @@ const COMPONENTS: Components = {
   // Only paragraphs: their content is inline, so no newline between blocks
   // can become a blank line.
   p: ({ children }) => <p className="whitespace-pre-line">{children}</p>,
-  ul: ({ children, className }) => (
-    <ul className={className?.includes("contains-task-list") ? "list-none" : "list-disc pl-6 marker:text-list-marker"}>{children}</ul>
-  ),
+  // Pi's bullet is "- ", for every level and before a task's box too.
+  ul: ({ children }) => <ul className="list-['-_'] pl-6 marker:text-list-marker">{children}</ul>,
   ol: ({ children, start }) => (
     <ol start={start} className="list-decimal pl-6 marker:text-list-marker">
       {children}
@@ -73,7 +75,9 @@ const COMPONENTS: Components = {
   strong: ({ children }) => <strong className="font-bold">{children}</strong>,
   em: ({ children }) => <em className="italic">{children}</em>,
   del: ({ children }) => <del className="line-through">{children}</del>,
-  blockquote: ({ children }) => <blockquote className="flex flex-col gap-6 border-l-2 border-muted pl-4 text-muted">{children}</blockquote>,
+  blockquote: ({ children }) => (
+    <blockquote className="flex flex-col gap-6 border-l-2 border-muted pl-4 text-muted italic">{children}</blockquote>
+  ),
   hr: () => <hr className="border-hairline" />,
   table: ({ children }) => <table className="w-full">{children}</table>,
   th: ({ children, style }) => (
