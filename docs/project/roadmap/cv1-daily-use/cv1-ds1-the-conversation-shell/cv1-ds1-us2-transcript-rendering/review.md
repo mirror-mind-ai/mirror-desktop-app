@@ -2,25 +2,25 @@
 
 ## Status
 
-Pending debt decision
+Reviewed
 
 ## Debt Findings
 
-- (1) Bundle: the JavaScript grew from 397 KB to 744 KB (gzip 119 KB to 225 KB): highlight.js's 37 common grammars about 173 KB (53 KB gzip), react-markdown with GFM about 158 KB (48 KB gzip). Vite now warns on every build. Proposal: pay now with a tripwire, the chunk-size warning limit set to 800 KB in vite.config.ts with its reason (the app loads from disk), so the gate is quiet and warns again at the next growth; alternatives: split the Markdown stack into its own chunk, or defer until CV3 ships updates over the network. (2) The window does not refuse a navigation: the transcript prevents a link's click and middle click, but nothing guards the webview itself (no navigation hook in the Rust shell, no context-menu handler), so WebKit's own Open Link on a right-click likely loads the page inside the app. Proposal: defer to the ledger as TD-003, a Rust change outside this story, revisited by the next story that changes the Rust shell and before CV1's week of daily use. (3) Duplication and a misleading name: textOf is written twice (Markdown.tsx and codeTree.ts), and a link's node is typed CodeTreeNode. Proposal: pay now, one TreeNode type and one textOf. (4) TD-001's revisit trigger names US2, which needed no fixture with several text blocks. Proposal: correct the trigger's text; the debt stays deferred.
+- Paid (bf2cc48), by the Navigator's ruling: (1) the build's chunk-size warning, written for pages fetched over a network, fired on every gate since the Markdown and highlighting stack took the UI to 748 kB; the limit is now 800 kB with its reason in vite.config.ts, a tripwire that warns again at the next growth; (3) the text helper written twice and the link's node typed CodeTreeNode are one TreeNode type and one textOf in tree.ts. Corrected: (4) TD-001's revisit trigger no longer names US2, which needed no fixture with several text blocks; the debt stays deferred. Carried forward: (2) the window itself accepts any navigation, nothing in the Rust shell refusing a URL outside the app and WebKit's right-click Open Link left; TD-003 in the ledger, pointed to by D16.
 
 ## Debt Decision
 
-pending
+defer
 
 ## Defer Reason
 
-none
+The guard is a change to the Rust shell, which US2 ruled out; the transcript already closes the paths it draws (a click, a middle click, any target but https), and the path left needs the person's right-click and a choice in WebKit's menu.
 
 ## Revisit Trigger
 
-none
+The next story that changes the Rust shell, and in any case before CV1's week of daily use begins (TD-003).
 
 ## Missing Decision
 
-- Navigator debt decision is required
-<!-- ariad-seal sha256:80460f007c733639cb98a91488ef507e574a90f3255e51ad99499c00980fcda8 — Ariad wrote this file and rewrites it only while this line matches the text above it. Edit the file and Ariad will leave it as it is. -->
+- none
+<!-- ariad-seal sha256:9577bfe87fa623ebb8b6b89916b27567cdaa23150da42150d3013d5b99099481 — Ariad wrote this file and rewrites it only while this line matches the text above it. Edit the file and Ariad will leave it as it is. -->
