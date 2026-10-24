@@ -59,7 +59,9 @@ Expected:
 4. `npm run bundle --workspace apps/desktop`, launch the built app, choose
    dark, quit, launch again with the OS in light: it opens dark. Record the
    origin the bundle runs on.
-5. Dark beside Pi: the same instrument.
+5. Dark beside Pi: the face, the weight and the ground, as at the
+   checkpoint. The colors along the text are not judged here: they come
+   with US2's Markdown.
 6. Light on its own: every state legible and coherent; muted, dim, notice
    and danger text read on the canvas and on the sidebar; the warm canvas,
    blue selection and violet accent hold together.
@@ -75,4 +77,12 @@ what you saw.
 
 ## Validation Evidence
 
-Recorded when validation runs.
+**Checkpoint (R1), 2026-10-24.** The Navigator ran the app (`npm run dev`)
+on a real Journey in both themes and read the dark transcript beside Pi in
+iTerm. The face passes. The text read monochrome next to Pi's: Pi colors
+its Markdown (headings, inline code, list markers, links, code blocks),
+and the transcript still printed Markdown as source. Ruling: Markdown in
+Pi's colors stays in CV1.DS1.US2, captured in its index; this story
+continues.
+
+The rest is recorded when validation runs.

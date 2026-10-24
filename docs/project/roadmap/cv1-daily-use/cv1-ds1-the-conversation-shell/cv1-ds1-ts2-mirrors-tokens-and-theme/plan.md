@@ -51,6 +51,13 @@ and approved with the Navigator's rulings; see
 | R1 | An early look | **A Navigator checkpoint mid-implementation**: once the tokens are in and the transcript, composer and header are restyled, the Navigator reads them beside a Pi window before the rest of the chrome is restyled. |
 | R3 | The title | **16 px bold**, the body size; the facts beside it stay 13 px muted. |
 
+**Checkpoint (R1), 2026-10-24.** The Navigator read the dark transcript
+beside Pi: the face passes. The text read monochrome, because Pi's colors
+along the text are its Markdown roles and the transcript does not render
+Markdown yet. By the Navigator's ruling, Markdown in Pi's colors stays in
+CV1.DS1.US2, captured in its index, and this story continues with the rest
+of the chrome.
+
 **Light is judged on its own.** The Navigator reads Pi only in dark, so the
 light theme has no lived reference: it is judged on its coherence and the
 legibility of every state, not on fidelity. Tuning light values after the
@@ -279,7 +286,7 @@ Then each names a token the stylesheet defines
 
 Given the dark theme beside a Pi window (Navigator, at the checkpoint and in the route)
 When the Navigator reads the transcript
-Then the face is Monaco, the accent Pi's violet, the ground the terminal's, and it reads as the same instrument
+Then the face is Monaco, the accent Pi's violet and the ground the terminal's; the colors along the text come with US2's Markdown
 ```
 
 ## Approach
