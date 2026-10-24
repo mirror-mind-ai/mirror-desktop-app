@@ -254,4 +254,5 @@ This posture rests on react-markdown's defaults. A bump of `react-markdown`,
 `remark-gfm` or `rehype-highlight` is a security change and is reviewed as
 one; the tests over the `unsafe-answer` fixture are its net. The window
 itself does not yet refuse a navigation the transcript failed to prevent;
-that guard belongs to the Rust shell, a later story's.
+that guard belongs to the Rust shell, and the
+[ledger](roadmap/technical-debt-ledger.md) carries it as TD-003.

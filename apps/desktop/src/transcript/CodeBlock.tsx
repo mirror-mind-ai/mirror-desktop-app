@@ -1,7 +1,8 @@
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { type CodeTreeNode, sourceText } from "./codeTree.ts";
+import { sourceText } from "./codeTree.ts";
+import type { TreeNode } from "./tree.ts";
 
 /** How long the Copy button says "Copied". */
 const COPIED_FOR_MS = 1500;
@@ -17,7 +18,7 @@ const InCodeBlock = createContext(false);
  * than the page, so the hidden-character markers stay out and the characters
  * they mark stay in.
  */
-export function CodeBlock({ node, children }: { node?: CodeTreeNode | undefined; children?: ReactNode }) {
+export function CodeBlock({ node, children }: { node?: TreeNode | undefined; children?: ReactNode }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);

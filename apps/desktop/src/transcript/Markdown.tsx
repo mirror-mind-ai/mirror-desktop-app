@@ -6,8 +6,9 @@ import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 
 import { Code, CodeBlock } from "./CodeBlock.tsx";
-import { type CodeTreeNode, rehypeCapHighlight, rehypeHiddenCharacters, rehypeUnknownLanguage } from "./codeTree.ts";
+import { rehypeCapHighlight, rehypeHiddenCharacters, rehypeUnknownLanguage } from "./codeTree.ts";
 import { keepHttps, lureHost } from "./links.ts";
+import { textOf, type TreeNode } from "./tree.ts";
 
 /**
  * An answer's text, drawn as Pi draws its Markdown (D16): each element in
@@ -90,9 +91,13 @@ const COMPONENTS: Components = {
       {children}
     </td>
   ),
-  pre: ({ node, children }) => <CodeBlock node={node as CodeTreeNode | undefined}>{children}</CodeBlock>,
+  pre: ({ node, children }) => <CodeBlock node={node as TreeNode | undefined}>{children}</CodeBlock>,
   code: ({ className, children }) => <Code className={className}>{children}</Code>,
-  a: ({ href, children, node }) => <Link href={href} text={textOf(node as CodeTreeNode | undefined)}>{children}</Link>,
+  a: ({ href, children, node }) => (
+    <Link href={href} text={node ? textOf(node as TreeNode) : ""}>
+      {children}
+    </Link>
+  ),
   // An image would fetch from wherever the model pointed, or draw whatever a
   // data: URL holds; its alt text says what it was.
   img: ({ alt }) => <span className="text-muted">[{alt || "image"}]</span>,
@@ -130,10 +135,4 @@ function Link({ href, text, children }: { href?: string | undefined; text: strin
       {lure ? <span className="text-muted"> ({lure})</span> : null}
     </>
   );
-}
-
-function textOf(node: CodeTreeNode | undefined): string {
-  if (!node) return "";
-  if (node.type === "text") return node.value ?? "";
-  return (node.children ?? []).map(textOf).join("");
 }

@@ -17,17 +17,9 @@
 //   one command and hold another. Copy still copies the character itself:
 //   `sourceText` reads it back from the marker.
 //
-// The tree is typed here by the little these passes touch, so the app does
-// not import a syntax-tree package of its own.
+// The tree's type and its text are tree.ts's, shared with Markdown.tsx.
 
-/** The parts of a hast node these passes read and write. */
-export interface CodeTreeNode {
-  type: string;
-  tagName?: string;
-  value?: string;
-  properties?: Record<string, unknown>;
-  children?: CodeTreeNode[];
-}
+import { textOf, type TreeNode } from "./tree.ts";
 
 interface FileMessages {
   readonly messages: readonly {
@@ -64,7 +56,7 @@ const HIDDEN_NAMES: Readonly<Record<string, string>> = {
 
 /** Before rehype-highlight: leave a block over the limit unhighlighted. */
 export function rehypeCapHighlight() {
-  return (tree: CodeTreeNode): void => {
+  return (tree: TreeNode): void => {
     forEachBlock(tree, (code) => {
       if (textOf(code).length > HIGHLIGHT_LIMIT) classesOf(code).push("no-highlight");
     });
@@ -73,7 +65,7 @@ export function rehypeCapHighlight() {
 
 /** After rehype-highlight: a block whose language it does not know is not highlighted. */
 export function rehypeUnknownLanguage() {
-  return (tree: CodeTreeNode, file: FileMessages): void => {
+  return (tree: TreeNode, file: FileMessages): void => {
     const unknown = new Set(
       file.messages
         .filter((message) => message.source === "rehype-highlight" && message.ruleId === "missing-language")
@@ -88,7 +80,7 @@ export function rehypeUnknownLanguage() {
 
 /** After highlighting: every hidden character in code becomes a marker naming it. */
 export function rehypeHiddenCharacters() {
-  return (tree: CodeTreeNode): void => {
+  return (tree: TreeNode): void => {
     visit(tree, (node) => {
       if (node.tagName === "code") markHidden(node);
     });
@@ -96,14 +88,14 @@ export function rehypeHiddenCharacters() {
 }
 
 /** The text a code node holds, hidden characters included, as the answer wrote it. */
-export function sourceText(node: CodeTreeNode): string {
+export function sourceText(node: TreeNode): string {
   if (node.type === "text") return node.value ?? "";
   const hidden = node.properties?.["dataHiddenCharacter"];
   if (typeof hidden === "string") return String.fromCodePoint(Number.parseInt(hidden, 16));
   return (node.children ?? []).map(sourceText).join("");
 }
 
-function markHidden(node: CodeTreeNode): void {
+function markHidden(node: TreeNode): void {
   node.children = (node.children ?? []).flatMap((child) => {
     if (child.type !== "text") {
       markHidden(child);
@@ -111,7 +103,7 @@ function markHidden(node: CodeTreeNode): void {
     }
     const value = child.value ?? "";
     if (!HIDDEN.test(value)) return [child];
-    const pieces: CodeTreeNode[] = [];
+    const pieces: TreeNode[] = [];
     let from = 0;
     for (const match of value.matchAll(EVERY_HIDDEN)) {
       if (match.index > from) pieces.push({ type: "text", value: value.slice(from, match.index) });
@@ -123,7 +115,7 @@ function markHidden(node: CodeTreeNode): void {
   });
 }
 
-function marker(char: string): CodeTreeNode {
+function marker(char: string): TreeNode {
   const code = (char.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0");
   return {
     type: "element",
@@ -138,24 +130,19 @@ function marker(char: string): CodeTreeNode {
 }
 
 /** Each code block: a `code` element inside a `pre`. */
-function forEachBlock(tree: CodeTreeNode, act: (code: CodeTreeNode) => void): void {
+function forEachBlock(tree: TreeNode, act: (code: TreeNode) => void): void {
   visit(tree, (node) => {
     if (node.tagName !== "pre") return;
     for (const child of node.children ?? []) if (child.tagName === "code") act(child);
   });
 }
 
-function visit(node: CodeTreeNode, act: (node: CodeTreeNode) => void): void {
+function visit(node: TreeNode, act: (node: TreeNode) => void): void {
   act(node);
   for (const child of node.children ?? []) visit(child, act);
 }
 
-function textOf(node: CodeTreeNode): string {
-  if (node.type === "text") return node.value ?? "";
-  return (node.children ?? []).map(textOf).join("");
-}
-
-function classesOf(node: CodeTreeNode): string[] {
+function classesOf(node: TreeNode): string[] {
   const current = node.properties?.["className"];
   const classes = Array.isArray(current) ? current.filter((name): name is string => typeof name === "string") : [];
   node.properties = { ...node.properties, className: classes };

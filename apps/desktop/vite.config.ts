@@ -16,5 +16,10 @@ export default defineConfig({
   build: {
     target: ["es2023", "safari16"],
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
+    // Vite warns above 500 kB for pages fetched over a network. This UI loads
+    // from disk, and the transcript's Markdown and highlighting stack
+    // (CV1.DS1.US2) put it at 748 kB. The limit sits just above that: a
+    // tripwire, so the gate stays quiet and warns again at the next growth.
+    chunkSizeWarningLimit: 800,
   },
 });
