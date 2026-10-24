@@ -15,7 +15,7 @@ export function AppearanceControl() {
   const Icon = ICONS[preference];
   const label = `Appearance: ${preference}`;
   return (
-    <button type="button" aria-label={label} title={label} onClick={cycleAppearance} className="flex items-center hover:text-foreground">
+    <button type="button" aria-label={label} title={label} onClick={cycleAppearance} className="flex items-center hover:text-ink">
       <Icon className="size-3.5" aria-hidden="true" />
     </button>
   );

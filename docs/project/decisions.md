@@ -177,3 +177,25 @@ The spike console opened a session on every click, which would have left an
 empty Mirror conversation behind for every look around the sidebar. CV1.DS2
 keeps the rule when sessions are listed and resumed: navigation never starts
 Pi or binds a conversation, a send or an explicit choice does.
+
+## D15 — Mirror's look is carried from Pi, revisable per role
+
+**Date:** 2026-10-24 · **Story:** [CV1.DS1.TS2](roadmap/cv1-daily-use/cv1-ds1-the-conversation-shell/cv1-ds1-ts2-mirrors-tokens-and-theme/index.md)
+
+The Navigator reads Pi every day and named it as the reference for the app's
+face, weight and colors. Pi brings colors but no font: its face is the
+terminal's, Monaco in iTerm2 on `#1e1e2e`, with Pi's `dark` theme. So the app
+is set in Monaco, which ships with macOS, and its colors are Pi's, carried
+from Pi's `dark.json` and `light.json` and converted from OKHSL with Pi's own
+code. `app.css` tags each value as carried, with its source, or derived from
+the canvas by a rule it names. The dark canvas is the Navigator's terminal.
+The light theme is Pi's light palette on Pi's own export page, and is judged
+on its own, since Pi is not read in light here.
+
+`app.css` is the whole vocabulary. Tailwind's palette, text sizes, weights,
+radii and animations are cleared, and a test holds every class in the app to
+what the stylesheet defines. CV1.DS1.US2 carries Pi's remaining roles
+(Markdown, syntax, tools, diffs) from the same files the same way. A role may
+depart from Pi, by a decision, so the stylesheet never quietly stops being
+Pi's. This refines D11's "the palette and typography are Mirror's own":
+Mirror's own, carried from Pi.

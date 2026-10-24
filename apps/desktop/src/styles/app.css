@@ -10,48 +10,107 @@
 @source not "../**/*.test.tsx";
 
 /*
- * Theme tokens. The app themes by ROOT CLASS (`.dark` / `.light` on <html>),
- * never by the OS media query alone, so "system" resolves to a class and every
- * `dark:` variant follows the app's choice. The curated palettes of the
- * predecessor app return as token sets here, one block per theme.
+ * Mirror's look, carried from Pi (D15): the Navigator reads Pi in iTerm2, in
+ * Monaco on #1e1e2e with Pi's dark palette, and this is that, in a window.
+ *
+ * The app themes by ROOT CLASS (`.dark` / `.light` on <html>, put there by
+ * theme/apply.ts before the first render), never by the OS media query alone,
+ * so "system" resolves to a class and every token follows the app's choice.
+ *
+ * This file is the whole vocabulary. Tailwind's own palette, text sizes,
+ * weights, radii and animations are cleared, so a class can only name what is
+ * defined here, and a test (styles/tokens.test.ts) holds every class in the
+ * app to it. Each color is tagged: carried, from Pi's theme files (dark.json,
+ * light.json, converted from OKHSL with Pi's own code) or the Navigator's
+ * terminal; or derived, by the rule named, computed with the same converter
+ * from the canvas. The table with its sources is in the CV1.DS1.TS2 plan.
  */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-display: ui-sans-serif, system-ui, sans-serif;
-  --font-sans: ui-sans-serif, system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-*: initial;
+  --text-*: initial;
+  --font-weight-*: initial;
+  --radius-*: initial;
+  --animate-*: initial;
 
-  --color-background: #0b0d12;
-  --color-foreground: #e8eaf0;
+  /* One face: Monaco, which ships with macOS, as the Navigator reads Pi. */
+  --font-sans: Monaco, ui-monospace, Menlo, monospace;
+  --font-mono: Monaco, ui-monospace, Menlo, monospace;
 
-  --color-card: #12151c;
-  --color-card-foreground: #e8eaf0;
+  /* Regular everywhere; emphasis is bold, which WebKit synthesizes, as iTerm does (Monaco has one face). */
+  --font-weight-normal: 400;
+  --font-weight-bold: 700;
 
-  --color-muted: #1a1e27;
-  --color-muted-foreground: #9aa3b5;
+  /* Type roles. */
+  --text-ui: 13px; /* sidebar rows, header facts, footer, tool rows */
+  --text-ui--line-height: 18px;
+  --text-body: 16px; /* transcript, composer, the area's statements */
+  --text-body--line-height: 24px;
+  --text-title: 16px; /* the header's name, state headings: the body's size, bold */
+  --text-title--line-height: 24px;
+  --text-title--font-weight: 700;
+  --text-meta: 12px; /* diagnostics, versions, fine print */
+  --text-meta--line-height: 16px;
 
-  --color-accent: #7c8cff;
-  --color-accent-foreground: #0b0d12;
+  /* The conversation's measure: a reading width, not the window's. */
+  --container-measure: 72ch;
 
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-ring: #7c8cff;
+  /* The only radius. */
+  --radius-control: 4px;
 
-  --radius-lg: 0.625rem;
-  --radius-2xl: 1rem;
+  /* The one motion: a slow pulse on one muted glyph, never on a label. */
+  --animate-pulse-quiet: pulse-quiet 1.6s ease-in-out infinite;
+  @keyframes pulse-quiet {
+    50% {
+      opacity: 0.4;
+    }
+  }
+
+  /* Dark, the default. */
+  --color-canvas: #1e1e2e; /* carried: iTerm2 profile Default, background */
+  --color-sidebar: #252537; /* derived: canvas +3 % L */
+  --color-raised: #2c2c40; /* derived: canvas +6 % L */
+  --color-ink: #dee0e1; /* carried: Pi dark text */
+  --color-muted: #9da5a9; /* carried: Pi dark muted */
+  --color-dim: #7e888e; /* carried: Pi dark dim */
+  --color-hairline: #35354c; /* derived: canvas +10 % L */
+  --color-selection: #213b49; /* carried: Pi dark selectedBg */
+  --color-hover: rgb(255 255 255 / 0.06); /* derived: an overlay, so it shows on every ground */
+  --color-accent: #a798d7; /* carried: Pi dark accent */
+  --color-on-accent: #1e1e2e; /* derived: the canvas, 6.3:1 on the accent */
+  --color-focus: #5fa8cc; /* carried: Pi dark border, the editor's focus */
+  --color-notice: #cd9a22; /* carried: Pi dark warning */
+  --color-danger: #ea7f81; /* carried: Pi dark error */
+  --color-success: #68b78d; /* carried: Pi dark success */
+  --color-user-message: #213b49; /* carried: Pi dark userMessageBg */
 }
 
 .light {
-  --color-background: #fbfbfd;
-  --color-foreground: #14161c;
-  --color-card: #ffffff;
-  --color-card-foreground: #14161c;
-  --color-muted: #f1f2f6;
-  --color-muted-foreground: #5d6677;
-  --color-accent: #3b4fd8;
-  --color-accent-foreground: #ffffff;
-  --color-border: rgba(0, 0, 0, 0.08);
-  --color-ring: #3b4fd8;
+  --color-canvas: #efeeee; /* carried: Pi light export.pageBg */
+  --color-sidebar: #f3f2f2; /* derived: canvas +1.5 % L */
+  --color-raised: #f7f6f6; /* carried: Pi light export.cardBg */
+  --color-ink: #3b3f41; /* carried: Pi light text */
+  --color-muted: #677176; /* carried: Pi light muted */
+  --color-dim: #879095; /* carried: Pi light dim */
+  --color-hairline: #dedcdc; /* derived: canvas -6 % L */
+  --color-selection: #dfe7ec; /* carried: Pi light selectedBg */
+  --color-hover: rgb(0 0 0 / 0.05); /* derived: an overlay, so it shows on every ground */
+  --color-accent: #7459b4; /* carried: Pi light accent */
+  --color-on-accent: #ffffff; /* derived: 5.5:1 on the accent */
+  --color-focus: #3d8eb3; /* carried: Pi light border, the editor's focus */
+  --color-notice: #8f6802; /* carried: Pi light warning */
+  --color-danger: #c8253d; /* carried: Pi light error */
+  --color-success: #337e58; /* carried: Pi light success */
+  --color-user-message: #dfe7ec; /* carried: Pi light userMessageBg */
+}
+
+/* Native controls and scrollbars follow the theme, not the system. */
+:root {
+  color-scheme: dark;
+}
+:root.light {
+  color-scheme: light;
 }
 
 html,
@@ -61,8 +120,19 @@ body,
   margin: 0;
 }
 
+/* The canvas behind everything, so no frame shows another ground. */
+html {
+  background-color: var(--color-canvas);
+}
+
 body {
   font-family: var(--font-sans);
+  color: var(--color-ink);
+  background-color: var(--color-canvas);
   -webkit-font-smoothing: antialiased;
   user-select: none;
+}
+
+::selection {
+  background-color: var(--color-selection);
 }

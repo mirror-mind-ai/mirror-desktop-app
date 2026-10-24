@@ -86,6 +86,10 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
   tested against a stub connection, no DOM. Every store registers itself for
   reset. How to write and read them, the selector rule included, is at the
   top of `apps/desktop/src/stores/registry.ts`.
+- **Colors and type come from the tokens** in `apps/desktop/src/styles/app.css`
+  (D15), never from Tailwind's palette or sizes, which the stylesheet clears.
+  A new color or size is a token first, in both themes;
+  `styles/tokens.test.ts` holds every class in the app to the tokens.
 - **Selecting a Journey writes nothing** (D14). The first send opens its
   session; navigation never starts Pi or binds a Mirror conversation.
 - **TDD for behavior.** A feature or fix starts with a failing test; error

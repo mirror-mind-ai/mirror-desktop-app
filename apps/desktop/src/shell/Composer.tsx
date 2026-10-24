@@ -9,7 +9,8 @@ import { useHost } from "../host/store.ts";
  * The composer, moved from the spike console: Enter sends, Shift+Enter breaks
  * a line, Stop replaces Send while a turn runs. The draft lives in the
  * conversation, so it survives switching Journeys. The rest of the composer
- * (Escape, saying why it cannot send) is CV1.DS1.US3's.
+ * (Escape, saying why it cannot send) is CV1.DS1.US3's. It sits in the
+ * transcript's measure, and marks focus with Pi's focus color on its edge.
  */
 export function Composer({ journeyId, conversation }: { journeyId: string; conversation: Conversation | undefined }) {
   const client = useHost((state) => state.client);
@@ -30,44 +31,46 @@ export function Composer({ journeyId, conversation }: { journeyId: string; conve
 
   return (
     <form
-      className="flex items-end gap-2 border-t border-border p-4"
+      className="shrink-0 border-t border-hairline px-5 py-4"
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
       }}
     >
-      <textarea
-        aria-label="Message"
-        className="min-h-[3rem] flex-1 resize-none rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-        placeholder="Say something to Pi…"
-        value={draft}
-        onChange={(event) => setDraft(journeyId, event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            void submit();
-          }
-        }}
-      />
-      {running ? (
-        <button
-          type="button"
-          onClick={() => {
-            if (client) void abort(client, journeyId);
+      <div className="mx-auto flex max-w-measure items-end gap-2">
+        <textarea
+          aria-label="Message"
+          className="min-h-12 flex-1 resize-none rounded-control border border-hairline bg-raised px-3 py-2 text-body text-ink outline-none placeholder:text-dim focus:border-focus"
+          placeholder="Say something to Pi…"
+          value={draft}
+          onChange={(event) => setDraft(journeyId, event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void submit();
+            }
           }}
-          className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm"
-        >
-          <Square className="size-4" aria-hidden="true" /> Stop
-        </button>
-      ) : (
-        <button
-          type="submit"
-          disabled={!draft.trim() || opening}
-          className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-50"
-        >
-          <Send className="size-4" aria-hidden="true" /> Send
-        </button>
-      )}
+        />
+        {running ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (client) void abort(client, journeyId);
+            }}
+            className="flex items-center gap-2 rounded-control border border-hairline px-4 py-2 text-ui text-ink hover:bg-hover"
+          >
+            <Square className="size-3.5" aria-hidden="true" /> Stop
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!draft.trim() || opening}
+            className="flex items-center gap-2 rounded-control bg-accent px-4 py-2 text-ui text-on-accent disabled:bg-raised disabled:text-dim"
+          >
+            <Send className="size-3.5" aria-hidden="true" /> Send
+          </button>
+        )}
+      </div>
     </form>
   );
 }

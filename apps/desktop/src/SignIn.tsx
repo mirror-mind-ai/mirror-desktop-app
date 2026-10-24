@@ -1,10 +1,11 @@
 import type { AuthFlowEvent, AuthFlowPrompt, AuthProvider, AuthType, HostEvent } from "@mirror-desktop/protocol";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CheckCircle2, ExternalLink, KeyRound, Loader2, LogIn, X } from "lucide-react";
+import { CheckCircle2, ExternalLink, KeyRound, LogIn, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import type { HostConnection } from "./host/client.ts";
+import { Pulse } from "./shell/Pulse.tsx";
 
 /**
  * Sign in to a model provider. Pi runs the flow in the host; this screen
@@ -104,13 +105,13 @@ export function SignIn({
       <div className="flex w-full max-w-2xl flex-col gap-4">
         <header className="flex items-end justify-between">
           <div>
-            <h1 className="font-display text-xl font-semibold">Sign in to a model provider</h1>
-            <p className="text-sm text-muted-foreground">
-              Credentials are stored by Pi in <code className="font-mono text-xs">~/.pi/agent/auth.json</code> and shared with terminal Pi.
+            <h1 className="text-title">Sign in to a model provider</h1>
+            <p className="text-ui text-muted">
+              Credentials are stored by Pi in <code className="font-mono">~/.pi/agent/auth.json</code> and shared with terminal Pi.
             </p>
           </div>
           {onDismiss ? (
-            <button type="button" onClick={onDismiss} className="rounded-lg border border-border px-3 py-1.5 text-sm">
+            <button type="button" onClick={onDismiss} className="rounded-control border border-hairline px-3 py-1.5 text-ui hover:bg-hover">
               Back
             </button>
           ) : null}
@@ -119,16 +120,16 @@ export function SignIn({
         {flow ? <FlowPanel flow={flow} onAnswerChange={(answer) => setFlow({ ...flow, answer })} onAnswer={answer} onChoose={choose} onCancel={cancel} /> : null}
 
         {providers === null ? (
-          <p className="text-sm text-muted-foreground">Loading providers…</p>
+          <p className="text-ui text-muted">Loading providers…</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {providers.map((provider) => (
-              <li key={provider.id} className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3">
+              <li key={provider.id} className="flex items-center justify-between gap-4 rounded-control border border-hairline bg-raised px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">{provider.name}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-ui font-bold">{provider.name}</p>
+                  <p className="text-meta text-muted">
                     {provider.signedIn ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-400">
+                      <span className="inline-flex items-center gap-1 text-success">
                         <CheckCircle2 className="size-3" aria-hidden="true" /> signed in via {provider.signedIn.authType}
                         {provider.signedIn.source ? ` · ${provider.signedIn.source}` : ""}
                       </span>
@@ -143,7 +144,7 @@ export function SignIn({
                       type="button"
                       disabled={flow !== null}
                       onClick={() => void start(provider.id, "oauth")}
-                      className="flex items-center gap-2 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground disabled:opacity-50"
+                      className="flex items-center gap-2 rounded-control bg-accent px-3 py-1.5 text-ui text-on-accent disabled:bg-raised disabled:text-dim"
                     >
                       <LogIn className="size-3.5" aria-hidden="true" /> {provider.oauth.label}
                     </button>
@@ -153,7 +154,7 @@ export function SignIn({
                       type="button"
                       disabled={flow !== null}
                       onClick={() => void start(provider.id, "api_key")}
-                      className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                      className="flex items-center gap-2 rounded-control border border-hairline px-3 py-1.5 text-ui hover:bg-hover disabled:text-dim"
                     >
                       <KeyRound className="size-3.5" aria-hidden="true" /> API key
                     </button>
@@ -184,19 +185,19 @@ function FlowPanel({
   const url = [...flow.events].reverse().find((event) => event.type === "auth_url");
   const prompt = flow.prompt?.prompt;
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-accent/40 bg-card p-4">
+    <div className="flex flex-col gap-3 rounded-control border border-accent/40 bg-raised p-4">
       <div className="flex items-center justify-between">
-        <p className="flex items-center gap-2 text-sm font-medium">
-          <Loader2 className="size-4 animate-spin text-accent" aria-hidden="true" />
+        <p className="flex items-center gap-2 text-ui font-bold">
+          <Pulse />
           Signing in to {flow.providerId} ({flow.authType === "oauth" ? "browser" : "API key"})
         </p>
-        <button type="button" onClick={onCancel} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+        <button type="button" onClick={onCancel} className="flex items-center gap-1 text-ui text-muted hover:text-ink">
           <X className="size-3.5" aria-hidden="true" /> Cancel
         </button>
       </div>
 
       {flow.events.map((event, index) => (
-        <p key={index} className="text-xs text-muted-foreground">
+        <p key={index} className="text-ui text-muted">
           {event.type === "auth_url"
             ? (event.instructions ?? "Continue in your browser.")
             : event.type === "device_code"
@@ -209,7 +210,7 @@ function FlowPanel({
         <button
           type="button"
           onClick={() => void openUrl(url.url)}
-          className="flex w-fit items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs"
+          className="flex w-fit items-center gap-2 rounded-control border border-hairline px-3 py-1.5 text-ui hover:bg-hover"
         >
           <ExternalLink className="size-3.5" aria-hidden="true" /> Open the sign-in page again
         </button>
@@ -217,7 +218,7 @@ function FlowPanel({
 
       {prompt?.type === "select" ? (
         <div className="flex flex-col gap-2">
-          <p className="text-sm">{prompt.message}</p>
+          <p className="text-ui">{prompt.message}</p>
           <div className="flex flex-wrap gap-2">
             {prompt.options.map((choice) => (
               <button
@@ -225,7 +226,7 @@ function FlowPanel({
                 type="button"
                 onClick={() => onChoose(choice.id)}
                 title={choice.description}
-                className="rounded-lg border border-border px-3 py-1.5 text-xs hover:border-accent"
+                className="rounded-control border border-hairline px-3 py-1.5 text-ui hover:border-accent"
               >
                 {choice.label}
               </button>
@@ -242,7 +243,7 @@ function FlowPanel({
             onAnswer();
           }}
         >
-          <label className="text-sm" htmlFor="auth-answer">
+          <label className="text-ui" htmlFor="auth-answer">
             {prompt.message}
           </label>
           <div className="flex gap-2">
@@ -253,18 +254,18 @@ function FlowPanel({
               placeholder={prompt.placeholder}
               value={flow.answer}
               onChange={(event) => onAnswerChange(event.target.value)}
-              className="flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="flex-1 rounded-control border border-hairline bg-canvas px-3 py-2 font-mono text-ui outline-none placeholder:text-dim focus:border-focus"
             />
             <button
               type="submit"
               disabled={!flow.answer.trim()}
-              className="rounded-lg bg-accent px-3 py-2 text-xs font-medium text-accent-foreground disabled:opacity-50"
+              className="rounded-control bg-accent px-3 py-2 text-ui text-on-accent disabled:bg-raised disabled:text-dim"
             >
               {prompt.type === "manual_code" ? "Use code" : "Continue"}
             </button>
           </div>
           {prompt.type === "manual_code" ? (
-            <p className="text-xs text-muted-foreground">Finishing in the browser completes this on its own; the field is a fallback.</p>
+            <p className="text-meta text-muted">Finishing in the browser completes this on its own; the field is a fallback.</p>
           ) : null}
         </form>
       ) : null}

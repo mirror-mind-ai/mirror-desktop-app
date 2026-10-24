@@ -10,15 +10,15 @@ export function HostUnreachable() {
   return (
     <div className="flex flex-1 items-center justify-center p-8">
       <div className="flex max-w-md flex-col gap-3">
-        <h1 className="font-display text-lg font-semibold">The host could not be reached</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-title">The host could not be reached</h1>
+        <p className="text-body text-muted">
           Mirror Desktop reaches Pi and Mirror through its host. Until the host answers, nothing here can work.
         </p>
-        {failure ? <p className="font-mono text-xs break-words text-muted-foreground">{failure}</p> : null}
+        {failure ? <p className="font-mono text-ui break-words text-muted">{failure}</p> : null}
         <button
           type="button"
           onClick={tryHostAgain}
-          className="w-fit rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/60"
+          className="w-fit rounded-control border border-hairline px-3 py-1.5 text-ui hover:bg-hover"
         >
           Try again
         </button>

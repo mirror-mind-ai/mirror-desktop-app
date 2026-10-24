@@ -2,7 +2,7 @@
 export function EmptyConversation() {
   return (
     <div className="flex flex-1 items-center justify-center">
-      <p className="text-sm text-muted-foreground">Pick a Journey</p>
+      <p className="text-body text-muted">Pick a Journey</p>
     </div>
   );
 }

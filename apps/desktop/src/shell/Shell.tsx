@@ -21,7 +21,7 @@ const NONE: readonly Journey[] = [];
 export function Shell() {
   const [signingIn, setSigningIn] = useState(false);
   return (
-    <div className="flex h-screen bg-background text-foreground">
+    <div className="flex h-screen bg-canvas text-ink">
       <Sidebar onSignIn={() => setSigningIn(true)} />
       <main className="flex min-w-0 flex-1 flex-col">
         <ConversationArea signingIn={signingIn} onSignInDone={() => setSigningIn(false)} />
