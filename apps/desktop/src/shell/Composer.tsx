@@ -12,11 +12,25 @@ import { useEscapeToStop } from "./useEscapeToStop.ts";
 const RUNNING = "Pi is answering. Your draft stays here until it finishes; Escape stops it.";
 
 /**
- * The composer, moved from the spike console: Enter sends, Shift+Enter breaks
- * a line, Stop replaces Send while a turn runs. The draft lives in the
- * conversation, so it survives switching Journeys. The rest of the composer
- * (Escape, saying why it cannot send) is CV1.DS1.US3's. It sits in the
- * transcript's measure, and marks focus with Pi's focus color on its edge.
+ * The composer: Enter sends (not while an IME composes), Shift+Enter breaks a
+ * line, Escape stops the turn from anywhere in the window, and Stop replaces
+ * Send while a turn runs. It takes focus when its conversation mounts, which
+ * the shell does per Journey, so picking and typing is one motion. The draft
+ * lives in the conversation, so it survives switching Journeys.
+ *
+ * It never sits dead without a word. While a turn runs, a line under the
+ * text box says so, in the register of the conversation's other lines: a
+ * statement about what is kept and what stops it, never an instruction.
+ * The conditions outside it are said elsewhere, once: no model by the
+ * sign-in panel in the conversation's place, a host gone by the shell's
+ * notice in place of the whole area. While the session opens, Send is
+ * disabled and the transcript says what is happening.
+ *
+ * The overlay rule for Escape: anything closable that handles Escape first,
+ * by preventing its default, keeps the turn running (useEscapeToStop).
+ *
+ * It sits in the transcript's measure, and marks focus with Pi's focus color
+ * on its edge.
  */
 export function Composer({ journeyId, conversation }: { journeyId: string; conversation: Conversation | undefined }) {
   const client = useHost((state) => state.client);
