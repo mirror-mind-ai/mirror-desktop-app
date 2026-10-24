@@ -1,0 +1,22 @@
+[
+  { "type": "agent_start" },
+  { "type": "message_start", "role": "user" },
+  { "type": "message_end", "role": "user", "text": "List the beds" },
+  { "type": "message_start", "role": "assistant" },
+  { "type": "text_delta", "delta": "Let me look." },
+  { "type": "message_end", "role": "assistant", "text": "Let me look.", "stopReason": "toolUse" },
+  { "type": "tool_start", "toolCallId": "call-1", "toolName": "bash", "args": {"command":"ls /Users/test/garden/beds"} },
+  { "type": "tool_end", "toolCallId": "call-1", "toolName": "bash", "isError": false, "durationMs": 4200, "resultText": "bed-01\nbed-02\nbed-03\nbed-04\nbed-05\nbed-06\nbed-07\nbed-08\nbed-09\nbed-10\nbed-11\nbed-12\n" },
+  { "type": "message_start", "role": "toolResult" },
+  { "type": "message_end", "role": "toolResult", "text": "bed-01\nbed-02\nbed-03\nbed-04\nbed-05\nbed-06\nbed-07\nbed-08\nbed-09\nbed-10\nbed-11\nbed-12\n" },
+  { "type": "tool_start", "toolCallId": "call-2", "toolName": "bash", "args": {"command":"ls /Users/test/garden/greenhouse"} },
+  { "type": "tool_end", "toolCallId": "call-2", "toolName": "bash", "isError": true, "durationMs": 90, "resultText": "ls: /Users/test/garden/greenhouse: No such file or directory" },
+  { "type": "message_start", "role": "toolResult" },
+  { "type": "message_end", "role": "toolResult", "text": "ls: /Users/test/garden/greenhouse: No such file or directory" },
+  { "type": "message_start", "role": "assistant" },
+  { "type": "text_delta", "delta": "Twelve beds, " },
+  { "type": "text_delta", "delta": "and no greenhouse yet." },
+  { "type": "message_end", "role": "assistant", "text": "Twelve beds, and no greenhouse yet.", "stopReason": "stop" },
+  { "type": "agent_end" },
+  { "type": "agent_settled", "aborted": false }
+]

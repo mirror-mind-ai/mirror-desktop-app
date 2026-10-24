@@ -203,6 +203,27 @@ describe("the fake host's sessions", () => {
     expect(stamps).toEqual([...stamps].sort((a, b) => a - b));
   });
 
+  // An extension that fails inside Pi is reported as a host event, not a
+  // session event, so a turn's fixture cannot carry it: the turn scripts it.
+  it("reports a turn's extension failures after answering its prompt and before its events", async () => {
+    const failure = { extension: "mirror", event: "before_agent_start", message: "the database is locked" };
+    const host = serveFakeHost(world({ turns: [{ prompt: "Hello", events: answer("Hello"), extensionErrors: [failure] }] }));
+    const { client, events } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden" });
+    await client.request({ type: "session.prompt", sessionId: "session-1", text: "Hello" });
+
+    await vi.waitFor(() => expect(events).toHaveLength(answer("Hello").length + 1));
+    expect(events[0]).toEqual({ type: "session.extension_error", sessionId: "session-1", ...failure });
+    expect(eventTypes(events.slice(1))).toEqual(answer("Hello").map((event) => event.type));
+  });
+
+  it("refuses an extension failure that breaks the protocol, naming the turn", () => {
+    const broken = world({
+      turns: [{ prompt: "Hello", events: answer("Hello"), extensionErrors: [{ extension: "mirror", event: 1 } as never] }],
+    });
+    expect(() => serveFakeHost(broken)).toThrow(/^The fake host's world: turns\[0\]\.extensionErrors\[0\]\.event: /);
+  });
+
   it("stops sending to a client once it closed", async () => {
     const host = serveFakeHost(world(withHello()));
     const staying = await connected(host.endpoint);

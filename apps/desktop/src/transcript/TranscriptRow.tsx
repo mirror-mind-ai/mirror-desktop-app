@@ -1,12 +1,15 @@
 import type { Row } from "../conversations/transcript.ts";
 import { Pulse } from "../shell/Pulse.tsx";
-import { toolPreview } from "./format.ts";
 import { Markdown } from "./Markdown.tsx";
+import { Notice } from "./Notice.tsx";
+import { Thinking } from "./Thinking.tsx";
+import { ToolRow } from "./ToolRow.tsx";
 
 /**
  * One transcript row, as Pi draws it, on Mirror's tokens: the person's own
- * words on Pi's user-message ground, as typed; the answer as Markdown in Pi's
- * roles, with the pulse beneath it while it streams.
+ * words on Pi's user-message ground, as typed; the answer with its thinking
+ * and its Markdown in Pi's roles, the pulse beneath it while it streams; a
+ * tool call on Pi's ground; a notice named; a diagnostic muted.
  */
 export function TranscriptRow({ row }: { row: Row }) {
   switch (row.kind) {
@@ -15,6 +18,7 @@ export function TranscriptRow({ row }: { row: Row }) {
     case "assistant":
       return (
         <div className="flex min-w-0 flex-col gap-3 text-body">
+          {row.thinking ? <Thinking text={row.thinking} answered={row.text !== ""} done={row.done} /> : null}
           {row.text ? <Markdown text={row.text} /> : null}
           {!row.done ? (
             <span className="flex h-6 items-center">
@@ -24,18 +28,9 @@ export function TranscriptRow({ row }: { row: Row }) {
         </div>
       );
     case "tool":
-      return (
-        <p className="rounded-control border border-hairline px-3 py-1.5 font-mono text-ui text-muted">
-          {row.done ? (row.isError ? "✗" : "✓") : "…"} {row.name} {toolPreview(row.args)}
-          {row.durationMs !== undefined ? ` · ${row.durationMs} ms` : ""}
-        </p>
-      );
+      return <ToolRow call={row} />;
     case "notice":
-      return (
-        <p className={row.tone === "danger" ? "text-ui text-danger" : "text-ui text-notice"}>
-          {row.name}: {row.text}
-        </p>
-      );
+      return <Notice notice={row} />;
     case "diagnostic":
       return <p className="text-meta text-muted">{row.text}</p>;
   }

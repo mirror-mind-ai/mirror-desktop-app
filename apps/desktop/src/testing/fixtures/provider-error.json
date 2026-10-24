@@ -1,0 +1,11 @@
+[
+  { "type": "agent_start" },
+  { "type": "message_start", "role": "user" },
+  { "type": "message_end", "role": "user", "text": "Plant the seeds" },
+  { "type": "message_start", "role": "assistant" },
+  { "type": "text_delta", "delta": "Planting the " },
+  { "type": "text_delta", "delta": "first row" },
+  { "type": "message_end", "role": "assistant", "text": "Planting the first row", "stopReason": "error", "errorMessage": "The provider closed the stream." },
+  { "type": "agent_end" },
+  { "type": "agent_settled", "aborted": false }
+]

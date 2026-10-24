@@ -24,6 +24,10 @@
 // no request ever met is reported when the test ends. A `session.open` can be
 // held, like a turn, so a test can watch the screen while a session opens.
 //
+// A turn can script the extension failures the real host reports for its
+// session (`session.extension_error`, a host event a turn's fixture cannot
+// carry): they are sent after the prompt's answer and before the turn's events.
+//
 // `session.abort` is answered for a session the host opened, but its effect is
 // not played: the turn plays on as scripted, held or not. The story that needs
 // what Stop does to a turn (CV1.DS2.US2) scripts it.
@@ -39,7 +43,7 @@ import {
   ClientRequest,
   type ClientRequestBody,
   HostError,
-  type HostEvent,
+  HostEvent,
   HostIdentity,
   HostMessage,
   Journey,
@@ -60,6 +64,15 @@ export interface ScriptedTurn {
   readonly events: readonly SessionEvent[];
   /** Hold the events until the test releases them, to watch the stream and the running state. */
   readonly held?: boolean;
+  /** Extensions that fail inside Pi on this turn, reported after the prompt's answer and before the events. */
+  readonly extensionErrors?: readonly ExtensionFailure[];
+}
+
+/** An extension failing inside Pi, as the real host reports it for a session. */
+export interface ExtensionFailure {
+  readonly extension: string;
+  readonly event: string;
+  readonly message: string;
 }
 
 /** A request the host fails with `error`, as the real host would, until the test calls stopFailing(). */
@@ -194,6 +207,10 @@ function checkWorld(world: World): HostIdentity {
   }
   world.turns.forEach((turn, index) => {
     parseTurn(`turns[${index}] ("${turn.prompt}")`, turn.events);
+    turn.extensionErrors?.forEach((failure, at) => {
+      const parsed = HostEvent.safeParse({ type: "session.extension_error", sessionId: "session-1", ...failure });
+      if (!parsed.success) throw fail(`turns[${index}].extensionErrors[${at}]`, parsed.error.issues[0]);
+    });
     for (const event of turn.events) {
       if (event.type === "message_end" && event.role === "user" && event.text !== turn.prompt) {
         throw new Error(
@@ -479,6 +496,9 @@ export class FakeHost implements SocketServer {
     }
     next.played = true;
     this.#reply(connection, { id, result: { type: "session.prompt", sessionId: request.sessionId } });
+    for (const failure of next.turn.extensionErrors ?? []) {
+      this.#broadcastHostEvent({ type: "session.extension_error", sessionId: request.sessionId, ...failure });
+    }
     const events = [...next.turn.events];
     const send = (event: SessionEvent) => this.#broadcast(request.sessionId, event);
     if (next.turn.held) {
@@ -488,16 +508,20 @@ export class FakeHost implements SocketServer {
     for (const event of events) send(event);
   }
 
-  /** To every open, authenticated connection, as the real host broadcasts. */
+  /** A session event, stamped, to every open, authenticated connection, as the real host broadcasts. */
   #broadcast(sessionId: string, event: SessionEvent): void {
-    const message: HostEvent = { type: "session.event", sessionId, at: this.#clock++, event };
+    this.#broadcastHostEvent({ type: "session.event", sessionId, at: this.#clock++, event });
+  }
+
+  #broadcastHostEvent(message: HostEvent): void {
     const problem = outboundProblem(message);
     if (problem) {
       record("protocol", problem);
       return;
     }
     const targets = [...this.#connections].filter((connection) => connection.authenticated && connection.side.isOpen);
-    log(`event ${event.type} → ${targets.map((target) => `#${target.side.id}`).join(", ") || "nobody"}`);
+    const what = message.type === "session.event" ? message.event.type : message.type;
+    log(`event ${what} → ${targets.map((target) => `#${target.side.id}`).join(", ") || "nobody"}`);
     const frame = JSON.stringify(message);
     for (const target of targets) target.side.send(frame);
   }
