@@ -74,12 +74,12 @@ describe("a Journey's conversation", () => {
     host.heldTurn().release();
     await screen.findByRole("button", { name: "Garden", busy: false });
     expect(within(transcript()).queryByText("Hello")).toBeNull();
-    expect(within(transcript()).queryByText(exactly(answer))).toBeNull();
+    expect(within(transcript()).queryByText(exactly(answer), { selector: "p" })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Garden" }));
     expect(messageBox().value).toBe("Water the beds");
     expect(within(transcript()).getByText("Hello")).toBeTruthy();
-    expect(within(transcript()).getByText(exactly(answer))).toBeTruthy();
+    expect(within(transcript()).getByText(exactly(answer), { selector: "p" })).toBeTruthy();
     expect(within(transcript()).queryByText("Seeds sown.")).toBeNull();
 
     expect(host.requestsOf("session.open")).toEqual([

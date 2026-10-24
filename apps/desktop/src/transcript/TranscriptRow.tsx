@@ -1,12 +1,12 @@
 import type { Row } from "../conversations/transcript.ts";
-import { toolPreview } from "../transcript/format.ts";
-import { Pulse } from "./Pulse.tsx";
+import { Pulse } from "../shell/Pulse.tsx";
+import { toolPreview } from "./format.ts";
+import { Markdown } from "./Markdown.tsx";
 
 /**
- * One transcript row, drawn as the spike console drew it, on Mirror's tokens:
- * the person's own words on Pi's user-message ground across the measure, as
- * Pi draws them, the answer as plain text in the reading size. How each kind
- * of row is rendered (Markdown, tools, thinking) is CV1.DS1.US2's.
+ * One transcript row, as Pi draws it, on Mirror's tokens: the person's own
+ * words on Pi's user-message ground, as typed; the answer as Markdown in Pi's
+ * roles, with the pulse beneath it while it streams.
  */
 export function TranscriptRow({ row }: { row: Row }) {
   switch (row.kind) {
@@ -14,10 +14,10 @@ export function TranscriptRow({ row }: { row: Row }) {
       return <p className="rounded-control bg-user-message px-3 py-2 text-body whitespace-pre-wrap">{row.text}</p>;
     case "assistant":
       return (
-        <div className="text-body whitespace-pre-wrap">
-          {row.text}
+        <div className="flex min-w-0 flex-col gap-3 text-body">
+          {row.text ? <Markdown text={row.text} /> : null}
           {!row.done ? (
-            <span className="ml-2 inline-flex align-middle">
+            <span className="flex h-6 items-center">
               <Pulse />
             </span>
           ) : null}

@@ -37,10 +37,11 @@ describe("the shell against the fake host", () => {
     const turn = host.heldTurn();
     turn.releaseThrough(isTextDelta);
     turn.releaseThrough(isTextDelta);
-    await screen.findByText(exactly("Tides turn slowly\n"));
+    // Mid-stream the answer is already Markdown: the partial text is its first paragraph.
+    await screen.findByText(exactly("Tides turn slowly"), { selector: "p" });
 
     turn.releaseThrough(isAssistantEnd);
-    const whole = await screen.findByText(exactly(answer));
+    const whole = await screen.findByText(exactly(answer), { selector: "p" });
     expect(prompt.compareDocumentPosition(whole) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy();
 

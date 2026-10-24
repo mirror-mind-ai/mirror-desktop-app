@@ -1,0 +1,17 @@
+[
+  { "type": "agent_start" },
+  { "type": "message_start", "role": "user" },
+  { "type": "message_end", "role": "user", "text": "Try the edges" },
+  { "type": "message_start", "role": "assistant" },
+  { "type": "text_delta", "delta": "Raw <img src=x onerror=alert(1)> inline.\n\n<scr" },
+  { "type": "text_delta", "delta": "ipt>alert(1)</script>\n\n[run](javascript:alert(1)" },
+  { "type": "text_delta", "delta": ") [page](data:text/html,hi) [plain](http://examp" },
+  { "type": "text_delta", "delta": "le.test/a) [mail](mailto:a@example.test) and www" },
+  { "type": "text_delta", "delta": ".example.test, then [safe](https://example.test/" },
+  { "type": "text_delta", "delta": "b).\n\n![a chart](https://example.test/chart.png) " },
+  { "type": "text_delta", "delta": "![](data:image/png;base64,AAAA)\n\nSee [example.te" },
+  { "type": "text_delta", "delta": "st/docs](https://elsewhere.test/x)." },
+  { "type": "message_end", "role": "assistant", "text": "Raw <img src=x onerror=alert(1)> inline.\n\n<script>alert(1)</script>\n\n[run](javascript:alert(1)) [page](data:text/html,hi) [plain](http://example.test/a) [mail](mailto:a@example.test) and www.example.test, then [safe](https://example.test/b).\n\n![a chart](https://example.test/chart.png) ![](data:image/png;base64,AAAA)\n\nSee [example.test/docs](https://elsewhere.test/x).", "stopReason": "stop" },
+  { "type": "agent_end" },
+  { "type": "agent_settled", "aborted": false }
+]

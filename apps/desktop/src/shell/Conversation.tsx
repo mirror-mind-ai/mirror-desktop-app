@@ -9,7 +9,7 @@ import { Pulse } from "./Pulse.tsx";
 import { RefreshJourneys } from "./RefreshJourneys.tsx";
 import { shortenHome } from "./shortenHome.ts";
 import { SignInPanel } from "./SignInPanel.tsx";
-import { TranscriptRow } from "./TranscriptRow.tsx";
+import { TranscriptRow } from "../transcript/TranscriptRow.tsx";
 
 const NO_ROWS: readonly Row[] = [];
 
