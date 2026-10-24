@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { FakeSocket, listen, resetSockets, type ServerSide, type SocketPeer } from "./fakeSocket.ts";
+import { FakeSocket, listen, resetSockets, type ServerSide, type SocketPeer, stopListening } from "./fakeSocket.ts";
 import { take } from "./violations.ts";
 
 const ENDPOINT = "ws://127.0.0.1:0";
@@ -119,6 +119,40 @@ describe("the socket double", () => {
     expect(events).toEqual(["error", "close"]);
     expect(socket.readyState).toBe(FakeSocket.CLOSED);
     expect(take()).toEqual([{ kind: "socket", detail: expect.stringContaining("ws://localhost:0") }]);
+  });
+
+  it("can be dropped by the host as a dying process drops it: queued frames, then error, then an unclean 1006", async () => {
+    const server = recordingServer();
+    const socket = new FakeSocket(ENDPOINT);
+    const events: string[] = [];
+    socket.addEventListener("message", (event) => events.push(`message ${String((event as MessageEvent).data)}`));
+    socket.addEventListener("error", () => events.push("error"));
+    socket.addEventListener("close", (event) => {
+      const close = event as CloseEvent;
+      events.push(`close ${close.code} "${close.reason}" ${close.wasClean ? "clean" : "unclean"}`);
+    });
+    await nextTask();
+    server.sides[0]?.send("last words");
+    server.sides[0]?.drop();
+    expect(server.sides[0]?.isOpen).toBe(false);
+    await nextTask();
+    await nextTask();
+    expect(events).toEqual(["message last words", "error", 'close 1006 "" unclean']);
+    expect(socket.readyState).toBe(FakeSocket.CLOSED);
+    expect(take()).toEqual([]);
+  });
+
+  it("refuses a socket to an address nobody listens on any more, as a dead port does, recording nothing", async () => {
+    recordingServer();
+    stopListening(ENDPOINT);
+    const socket = new FakeSocket(ENDPOINT);
+    const events: string[] = [];
+    socket.addEventListener("error", () => events.push("error"));
+    socket.addEventListener("close", (event) => events.push(`close ${(event as CloseEvent).code}`));
+    await nextTask();
+    expect(events).toEqual(["error", "close 1006"]);
+    expect(socket.readyState).toBe(FakeSocket.CLOSED);
+    expect(take()).toEqual([]);
   });
 
   it("drops every frame still queued when the harness resets between tests", async () => {

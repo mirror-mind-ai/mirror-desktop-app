@@ -13,7 +13,14 @@
 // It connects only to an address a fake host is listening on, which is exactly
 // `ws://127.0.0.1:<port>` for the port the fake endpoint handed out. A socket to
 // any other address is refused, as a real refused connection is, and recorded:
-// the host token must never be sent anywhere else.
+// the host token must never be sent anywhere else. An address a host stopped
+// listening on is refused the same way and recorded as nothing: that is a dead
+// port, which is what a host process that died leaves behind.
+//
+// A host can close a socket cleanly, with a code and a reason, as the real host
+// does after an unauthorized hello; or drop it, as a dying process does: the
+// frames it already sent arrive, then an error, then an unclean close with
+// 1006 and no reason.
 
 import { log } from "./traffic.ts";
 import { record } from "./violations.ts";
@@ -28,7 +35,10 @@ export interface ServerSide {
   readonly id: number;
   readonly isOpen: boolean;
   send(frame: string): void;
+  /** Close cleanly, with a close frame the UI hears by code and reason. */
   close(code: number, reason: string): void;
+  /** Vanish, as a killed process does: no close frame; the UI hears an error, then an unclean 1006. */
+  drop(): void;
 }
 
 /** What a fake host gives a socket that connects to it. */
@@ -42,6 +52,8 @@ export interface SocketServer {
 }
 
 const servers = new Map<string, SocketServer>();
+/** Addresses a host once listened on: a socket to one is a dead port, not a violation. */
+const stopped = new Set<string>();
 const sockets = new Set<FakeSocket>();
 const timers = new Set<ReturnType<typeof setTimeout>>();
 let nextId = 1;
@@ -58,6 +70,12 @@ function later(task: () => void): void {
 /** Accept sockets to `url` on behalf of `server`. */
 export function listen(url: string, server: SocketServer): void {
   servers.set(url, server);
+  stopped.delete(url);
+}
+
+/** The host at `url` is gone: a socket to it from now on errors and closes, as one to a dead port does. */
+export function stopListening(url: string): void {
+  if (servers.delete(url)) stopped.add(url);
 }
 
 /**
@@ -71,6 +89,7 @@ export function resetSockets(): void {
   for (const socket of sockets) socket.discard();
   sockets.clear();
   servers.clear();
+  stopped.clear();
   nextId = 1;
 }
 
@@ -104,8 +123,8 @@ export class FakeSocket extends EventTarget implements WebSocket {
   #peer: SocketPeer | null = null;
   #inbox: string[] = [];
   #pumping = false;
-  /** The host asked to close: delivered after the frames it sent before asking, as a real close frame is. */
-  #hostClose: { code: number; reason: string } | null = null;
+  /** The host asked to close, or dropped: delivered after the frames it sent before, as a real close is. */
+  #hostClose: { code: number; reason: string; clean: boolean } | null = null;
 
   constructor(url: string | URL, _protocols?: string | string[]) {
     super();
@@ -114,8 +133,12 @@ export class FakeSocket extends EventTarget implements WebSocket {
     sockets.add(this);
     const server = servers.get(this.url);
     if (!server) {
-      record("socket", `a socket to ${this.url}, which is not the fake host's endpoint`);
-      log(`socket #${this.#id} to ${this.url} refused: not the fake host`);
+      if (stopped.has(this.url)) {
+        log(`socket #${this.#id} to ${this.url} refused: the host is gone`);
+      } else {
+        record("socket", `a socket to ${this.url}, which is not the fake host's endpoint`);
+        log(`socket #${this.#id} to ${this.url} refused: not the fake host`);
+      }
       later(() => {
         this.#readyState = CLOSED;
         sockets.delete(this);
@@ -180,7 +203,8 @@ export class FakeSocket extends EventTarget implements WebSocket {
         return socket.#readyState === OPEN && socket.#hostClose === null;
       },
       send: (frame) => this.#receiveFromHost(frame),
-      close: (code, reason) => this.#closeByHost(code, reason),
+      close: (code, reason) => this.#closeByHost(code, reason, true),
+      drop: () => this.#closeByHost(1006, "", false),
     };
   }
 
@@ -190,9 +214,9 @@ export class FakeSocket extends EventTarget implements WebSocket {
     this.#schedulePump();
   }
 
-  #closeByHost(code: number, reason: string): void {
+  #closeByHost(code: number, reason: string, clean: boolean): void {
     if (this.#readyState !== OPEN || this.#hostClose) return;
-    this.#hostClose = { code, reason };
+    this.#hostClose = { code, reason, clean };
     this.#schedulePump();
   }
 
@@ -219,8 +243,13 @@ export class FakeSocket extends EventTarget implements WebSocket {
     if (!close) return;
     this.#readyState = CLOSED;
     sockets.delete(this);
-    log(`socket #${this.#id} closed by the fake host (${close.code} ${close.reason})`);
-    this.#fire(closeEvent(close.code, close.reason, true));
+    if (close.clean) {
+      log(`socket #${this.#id} closed by the fake host (${close.code} ${close.reason})`);
+    } else {
+      log(`socket #${this.#id} dropped by the fake host`);
+      this.#fire(new Event("error"));
+    }
+    this.#fire(closeEvent(close.code, close.reason, close.clean));
   }
 
   #fire(event: Event): void {

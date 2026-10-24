@@ -36,6 +36,11 @@
 // not next, a request type the fake host does not answer) is answered at once
 // with a named error and recorded, so a test never waits on a reply that will
 // not come.
+//
+// A test can make the host go away, as a host process that dies does from the
+// UI's side: every connection is dropped uncleanly, the port is dead to the
+// next socket, and a held open that can no longer be answered is settled so
+// teardown does not name it. A test that then reconnects serves a fresh host.
 
 import {
   AuthProvider,
@@ -51,7 +56,7 @@ import {
   type SessionEvent,
 } from "@mirror-desktop/protocol";
 
-import { listen, type ServerSide, type SocketPeer, type SocketServer } from "./fakeSocket.ts";
+import { listen, type ServerSide, type SocketPeer, type SocketServer, stopListening } from "./fakeSocket.ts";
 import { scriptIpc } from "./ipcDoor.ts";
 import { log } from "./traffic.ts";
 import { parseTurn } from "./turns.ts";
@@ -293,6 +298,17 @@ export class FakeHost implements SocketServer {
         held.send();
       },
     };
+  }
+
+  /** The host process died: every connection dropped as a killed process drops it, and the port dead from now on. */
+  goAway(): void {
+    log("the fake host goes away");
+    stopListening(`ws://127.0.0.1:${this.endpoint.port}`);
+    for (const connection of this.#connections) connection.side.drop();
+    this.#connections.clear();
+    for (const [journey, held] of this.#heldOpens) {
+      if (held !== "waiting" && held !== "released") this.#heldOpens.set(journey, "released");
+    }
   }
 
   /** The person fixed what made `request` fail (for `journey`, for a session.open): answer it normally from now on. */

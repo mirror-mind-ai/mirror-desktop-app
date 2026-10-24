@@ -432,3 +432,23 @@ describe("the fake host's other answers", () => {
     });
   });
 });
+
+describe("the fake host going away", () => {
+  it("drops every connection as a dying process does, refuses the next, and settles what it held", async () => {
+    const host = serveFakeHost(world({ heldOpens: ["garden"] }));
+    const raw = await rawSocket(urlOf(host.endpoint));
+    const { client } = await connected(host.endpoint);
+    const unclean: boolean[] = [];
+    raw.socket.addEventListener("close", (event) => unclean.push(!(event as CloseEvent).wasClean));
+    void client.request({ type: "session.open", journey: "garden" });
+    await vi.waitFor(() => expect(host.requestsOf("session.open")).toHaveLength(1));
+
+    host.goAway();
+    await vi.waitFor(() => expect(raw.closes).toEqual([1006]));
+    expect(unclean).toEqual([true]);
+    await expect(HostClient.connect(host.endpoint)).rejects.toThrow("The host did not accept the connection.");
+
+    endFakeHosts();
+    expect(take()).toEqual([]);
+  });
+});
