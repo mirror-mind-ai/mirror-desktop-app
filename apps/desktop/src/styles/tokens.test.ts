@@ -33,6 +33,25 @@ describe("the stylesheet", () => {
     expect(declarations(cssBlock(css, "@theme")).get("--color-canvas")).toBe(CANVAS.dark);
     expect(declarations(cssBlock(css, ".light")).get("--color-canvas")).toBe(CANVAS.light);
   });
+
+  // The Navigator's request for CV1.DS1.US2, in Pi's values (D15): what the
+  // transcript's Markdown must read as. An element is held to its token's class
+  // by the transcript's own tests; the token is held to Pi's value here.
+  it("carries the Markdown colors the Navigator's request names, as Pi draws them", () => {
+    const markdown = (header: string) => {
+      const tokens = declarations(cssBlock(css, header));
+      return ["heading", "code", "list-marker", "link", "code-block"].map((role) => tokens.get(`--color-${role}`));
+    };
+    expect(markdown("@theme")).toEqual(["#cd9a22", "#a798d7", "#a798d7", "#69add0", "#68b78d"]);
+    expect(markdown(".light")).toEqual(["#8f6802", "#7459b4", "#7459b4", "#2f7899", "#337e58"]);
+  });
+
+  it("uses only the colors it defines", () => {
+    const defined = new Set(colorTokens("@theme"));
+    const used = [...css.matchAll(/var\((--color-[a-z-]+)\)/g)].map((match) => match[1] ?? "");
+    expect(used.length).toBeGreaterThan(0);
+    expect(used.filter((name) => !defined.has(name))).toEqual([]);
+  });
 });
 
 describe("the app's classes", () => {

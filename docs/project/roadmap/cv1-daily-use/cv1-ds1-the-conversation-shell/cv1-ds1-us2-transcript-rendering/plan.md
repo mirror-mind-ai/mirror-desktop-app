@@ -110,8 +110,8 @@ and the Navigator's rulings; see [plan-review.md](plan-review.md).
    | highlight.js 11 class | Pi key | Token |
    |---|---|---|
    | `.hljs-keyword`, `.hljs-name` | `keyword`, `name` | `syntax-keyword` |
-   | `.hljs-title.function_`, `.hljs-title` (bare) | `function`, `title` | `syntax-function` |
-   | `.hljs-title.class_`, `.hljs-type`, `.hljs-built_in` | `class`, `type`, `built_in` | `syntax-type` |
+   | `.hljs-title`, whether `function_`, `class_` or bare | `title`; a class name is a `title` inside a `class` in 10 | `syntax-function` |
+   | `.hljs-type`, `.hljs-built_in`, `.hljs-variable.language_` | `type`, `built_in`; `this` is a `built_in` in 10 | `syntax-type` |
    | `.hljs-variable`, `.hljs-attr`, `.hljs-params` | `variable`, `attr`, `params` | `syntax-variable` |
    | `.hljs-string`, `.hljs-regexp` | `string`, `regexp` | `syntax-string` |
    | `.hljs-number`, `.hljs-literal` | `number`, `literal` | `syntax-number` |
@@ -119,6 +119,15 @@ and the Navigator's rulings; see [plan-review.md](plan-review.md).
    | `.hljs-subst` | `subst` | `ink` |
    | `.hljs-emphasis`, `.hljs-strong`, `.hljs-link` | styles | italic, bold, underline |
    | `.hljs-addition`, `.hljs-deletion` | `addition`, `deletion` | `success`, `danger` |
+
+   A class is colored by its first name, with Pi's key of that name; where
+   10 and 11 name the same token differently, by what Pi draws. *Corrected
+   during implementation:* the first version mapped `title class_` to the
+   type color, by Pi's `class` key. Running Pi's own `highlightCode` on
+   `class Foo extends Bar` showed `Foo` and `Bar` in the function color,
+   because 10 marks a class name as a `title` inside a `class` and the inner
+   key wins; and `this` in the type color, as a `built_in`. The table now
+   carries what Pi draws.
 
    The stylesheet test keeps holding every token to both blocks, and the
    scan every class to the vocabulary; a test holds the mapping (9).

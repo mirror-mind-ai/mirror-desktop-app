@@ -84,6 +84,28 @@
   --color-danger: #ea7f81; /* carried: Pi dark error */
   --color-success: #68b78d; /* carried: Pi dark success */
   --color-user-message: #213b49; /* carried: Pi dark userMessageBg */
+
+  /*
+   * The transcript's roles (CV1.DS1.US2), carried the same way from the same
+   * files: Markdown as Pi's getMarkdownTheme() colors it, highlighted code as
+   * its syntax roles, thinking, and the grounds of a tool call. A role Pi
+   * aliases to muted (a link's URL, a quote, a rule, a comment) uses muted.
+   */
+  --color-heading: #cd9a22; /* carried: Pi dark mdHeading */
+  --color-code: #a798d7; /* carried: Pi dark mdCode */
+  --color-list-marker: #a798d7; /* carried: Pi dark mdListBullet */
+  --color-link: #69add0; /* carried: Pi dark mdLink */
+  --color-code-block: #68b78d; /* carried: Pi dark mdCodeBlock */
+  --color-thinking: #96a0a4; /* carried: Pi dark thinkingText */
+  --color-tool-pending: #34383a; /* carried: Pi dark toolPendingBg */
+  --color-tool-success: #254131; /* carried: Pi dark toolSuccessBg */
+  --color-tool-error: #5b282a; /* carried: Pi dark toolErrorBg */
+  --color-syntax-keyword: #69add0; /* carried: Pi dark syntaxKeyword */
+  --color-syntax-function: #cd9a22; /* carried: Pi dark syntaxFunction */
+  --color-syntax-variable: #5db3ba; /* carried: Pi dark syntaxVariable */
+  --color-syntax-string: #de8d5a; /* carried: Pi dark syntaxString */
+  --color-syntax-number: #68b78d; /* carried: Pi dark syntaxNumber */
+  --color-syntax-type: #a798d7; /* carried: Pi dark syntaxType */
 }
 
 .light {
@@ -103,6 +125,22 @@
   --color-danger: #c8253d; /* carried: Pi light error */
   --color-success: #337e58; /* carried: Pi light success */
   --color-user-message: #dfe7ec; /* carried: Pi light userMessageBg */
+
+  --color-heading: #8f6802; /* carried: Pi light mdHeading */
+  --color-code: #7459b4; /* carried: Pi light mdCode */
+  --color-list-marker: #7459b4; /* carried: Pi light mdListBullet */
+  --color-link: #2f7899; /* carried: Pi light mdLink */
+  --color-code-block: #337e58; /* carried: Pi light mdCodeBlock */
+  --color-thinking: #7c868c; /* carried: Pi light thinkingText */
+  --color-tool-pending: #e4e5e6; /* carried: Pi light toolPendingBg */
+  --color-tool-success: #dee9e1; /* carried: Pi light toolSuccessBg */
+  --color-tool-error: #eee2e1; /* carried: Pi light toolErrorBg */
+  --color-syntax-keyword: #2f7899; /* carried: Pi light syntaxKeyword */
+  --color-syntax-function: #8f6802; /* carried: Pi light syntaxFunction */
+  --color-syntax-variable: #287a81; /* carried: Pi light syntaxVariable */
+  --color-syntax-string: #a45417; /* carried: Pi light syntaxString */
+  --color-syntax-number: #337e58; /* carried: Pi light syntaxNumber */
+  --color-syntax-type: #7459b4; /* carried: Pi light syntaxType */
 }
 
 /* Native controls and scrollbars follow the theme, not the system. */
@@ -153,5 +191,70 @@ html [data-sonner-toaster][data-sonner-theme] {
 
 /* A toast is a failed action; its icon says so in the alarm's color. */
 html [data-sonner-toaster] [data-sonner-toast][data-type="error"] [data-icon] {
+  color: var(--color-danger);
+}
+
+/*
+ * Code with a language, colored as Pi colors it (CV1.DS1.US2). highlight.js 11
+ * marks the tokens (lowlight, through rehype-highlight, adds `hljs` to the
+ * block); Pi's mapping colors them: buildCliHighlightTheme in Pi's
+ * modes/interactive/theme/theme.js, keyed for the highlight.js 10 that Pi's
+ * cli-highlight runs. A class is colored by its first name, with Pi's key of
+ * that name: `hljs-title function_` and `hljs-title class_` are Pi's `title`.
+ * Where 10 and 11 name the same token differently, the color is what Pi draws,
+ * read from Pi's own highlightCode: a class name is a `title` inside a `class`
+ * in 10, drawn in the function color, and so here; `this` is a `built_in` in
+ * 10, drawn in the type color, and 11's `variable language_` follows it. A
+ * token Pi has no key for stays in the block's ink, as in Pi.
+ */
+.hljs .hljs-keyword,
+.hljs .hljs-name {
+  color: var(--color-syntax-keyword);
+}
+.hljs .hljs-title {
+  color: var(--color-syntax-function);
+}
+.hljs .hljs-type,
+.hljs .hljs-built_in,
+.hljs .hljs-variable.language_ {
+  color: var(--color-syntax-type);
+}
+.hljs .hljs-variable,
+.hljs .hljs-attr,
+.hljs .hljs-params {
+  color: var(--color-syntax-variable);
+}
+.hljs .hljs-string,
+.hljs .hljs-regexp {
+  color: var(--color-syntax-string);
+}
+.hljs .hljs-number,
+.hljs .hljs-literal {
+  color: var(--color-syntax-number);
+}
+.hljs .hljs-comment,
+.hljs .hljs-doctag,
+.hljs .hljs-meta,
+.hljs .hljs-operator,
+.hljs .hljs-punctuation,
+.hljs .hljs-tag {
+  color: var(--color-muted);
+}
+.hljs .hljs-subst {
+  color: var(--color-ink);
+}
+.hljs .hljs-emphasis {
+  font-style: italic;
+}
+.hljs .hljs-strong {
+  font-weight: var(--font-weight-bold);
+}
+.hljs .hljs-link {
+  text-decoration: underline;
+}
+.hljs .hljs-addition {
+  color: var(--color-success);
+}
+.hljs .hljs-deletion {
   color: var(--color-danger);
 }
