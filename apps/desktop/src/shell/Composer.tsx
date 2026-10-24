@@ -8,6 +8,9 @@ import { useHost } from "../host/store.ts";
 import { ACCENT_BUTTON } from "./buttons.ts";
 import { useEscapeToStop } from "./useEscapeToStop.ts";
 
+/** What the composer says under the text box while a turn runs: the thing that is dead (Enter), and what is kept. */
+const RUNNING = "Pi is answering. Your draft stays here until it finishes; Escape stops it.";
+
 /**
  * The composer, moved from the spike console: Enter sends, Shift+Enter breaks
  * a line, Stop replaces Send while a turn runs. The draft lives in the
@@ -45,42 +48,48 @@ export function Composer({ journeyId, conversation }: { journeyId: string; conve
         void submit();
       }}
     >
-      <div className="mx-auto flex max-w-measure items-end gap-2">
-        <textarea
-          aria-label="Message"
-          // The conversation mounts per Journey, so picking one focuses its composer.
-          autoFocus
-          className="min-h-12 flex-1 resize-none rounded-control border border-hairline bg-raised px-3 py-2 text-body text-ink outline-none placeholder:text-dim focus:border-focus"
-          placeholder="Say something to Pi…"
-          value={draft}
-          onChange={(event) => setDraft(journeyId, event.target.value)}
-          onKeyDown={(event) => {
-            // An Enter while an IME composes (a dead key on macOS) ends the composition, not the draft.
-            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              void submit();
-            }
-          }}
-        />
-        {running ? (
-          <button
-            type="button"
-            onClick={stop}
-            aria-keyshortcuts="Escape"
-            title="Stop (Escape)"
-            className="flex items-center gap-2 rounded-control border border-hairline px-4 py-2 text-ui text-ink hover:bg-hover"
-          >
-            <Square className="size-3.5" aria-hidden="true" /> Stop
-          </button>
-        ) : (
-          <button
-            type="submit"
-            disabled={!draft.trim() || opening}
-            className={`${ACCENT_BUTTON} px-4 py-2`}
-          >
-            <Send className="size-3.5" aria-hidden="true" /> Send
-          </button>
-        )}
+      <div className="mx-auto flex max-w-measure flex-col gap-1">
+        <div className="flex items-end gap-2">
+          <textarea
+            aria-label="Message"
+            // The conversation mounts per Journey, so picking one focuses its composer.
+            autoFocus
+            className="min-h-12 flex-1 resize-none rounded-control border border-hairline bg-raised px-3 py-2 text-body text-ink outline-none placeholder:text-dim focus:border-focus"
+            placeholder="Say something to Pi…"
+            value={draft}
+            onChange={(event) => setDraft(journeyId, event.target.value)}
+            onKeyDown={(event) => {
+              // An Enter while an IME composes (a dead key on macOS) ends the composition, not the draft.
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                void submit();
+              }
+            }}
+          />
+          {running ? (
+            <button
+              type="button"
+              onClick={stop}
+              aria-keyshortcuts="Escape"
+              title="Stop (Escape)"
+              className="flex items-center gap-2 rounded-control border border-hairline px-4 py-2 text-ui text-ink hover:bg-hover"
+            >
+              <Square className="size-3.5" aria-hidden="true" /> Stop
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!draft.trim() || opening}
+              className={`${ACCENT_BUTTON} px-4 py-2`}
+            >
+              <Send className="size-3.5" aria-hidden="true" /> Send
+            </button>
+          )}
+        </div>
+        {/* Always mounted, so a live region announces the change; empty while the composer can send. */}
+        <p role="status" className="min-h-5 text-ui text-muted">
+          {running ? RUNNING : ""}
+        </p>
       </div>
     </form>
   );

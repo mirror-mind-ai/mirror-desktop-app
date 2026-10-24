@@ -132,3 +132,55 @@ describe("Escape stops the turn", () => {
     await screen.findByRole("button", { name: "Garden", busy: false });
   });
 });
+
+describe("what the composer says when it cannot send", () => {
+  const line = "Pi is answering. Your draft stays here until it finishes; Escape stops it.";
+
+  it("says so while a turn runs, keeps the draft Enter did not send, and goes quiet when the turn settles", async () => {
+    const host = serveFakeHost({
+      models: [model],
+      journeys: [garden],
+      turns: [{ prompt: "Hello", events: briefAnswer("Hello", "Good morning."), held: true }],
+    });
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "Garden" }));
+    expect(screen.getByRole("status").textContent).toBe("");
+    await user.type(messageBox(), "Hello{Enter}");
+    await screen.findByRole("button", { name: "Stop" });
+    expect(screen.getByRole("status").textContent).toBe(line);
+
+    await user.type(messageBox(), "Next{Enter}");
+    expect(messageBox().value).toBe("Next");
+    expect(host.requestsOf("session.prompt")).toHaveLength(1);
+
+    host.heldTurn().release();
+    await screen.findByRole("button", { name: "Send" });
+    expect(screen.getByRole("status").textContent).toBe("");
+    expect(messageBox().value).toBe("Next");
+  });
+
+  it("keeps the draft on an Enter while the session opens", async () => {
+    const host = serveFakeHost({
+      models: [model],
+      journeys: [garden],
+      turns: [{ prompt: "Hello", events: briefAnswer("Hello", "Good morning.") }],
+      heldOpens: ["garden"],
+    });
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "Garden" }));
+    await user.type(messageBox(), "Hello{Enter}");
+    await screen.findByText("Opening in ~/garden…");
+    await user.type(messageBox(), "More{Enter}");
+    expect(messageBox().value).toBe("More");
+    expect(host.requestsOf("session.open")).toHaveLength(1);
+    expect(host.requestsOf("session.prompt")).toHaveLength(0);
+
+    host.heldOpen("garden").release();
+    await screen.findByText("Good morning.");
+    expect(messageBox().value).toBe("More");
+  });
+});
