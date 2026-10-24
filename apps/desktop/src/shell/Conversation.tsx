@@ -1,15 +1,15 @@
 import type { Journey } from "@mirror-desktop/protocol";
-import { useEffect, useId, useRef } from "react";
+import { useId } from "react";
 
 import { type Conversation as ConversationState, useConversations } from "../conversations/store.ts";
 import type { Row } from "../conversations/transcript.ts";
 import { useHost } from "../host/store.ts";
+import { Transcript } from "../transcript/Transcript.tsx";
 import { Composer } from "./Composer.tsx";
 import { Pulse } from "./Pulse.tsx";
 import { RefreshJourneys } from "./RefreshJourneys.tsx";
 import { shortenHome } from "./shortenHome.ts";
 import { SignInPanel } from "./SignInPanel.tsx";
-import { TranscriptRow } from "../transcript/TranscriptRow.tsx";
 
 const NO_ROWS: readonly Row[] = [];
 
@@ -47,7 +47,9 @@ export function Conversation({ journey }: { journey: Journey }) {
         <SignInPanel />
       ) : (
         <>
-          <Transcript where={shortenHome(journey.projectPath)} conversation={conversation} />
+          <Transcript rows={conversation?.rows ?? NO_ROWS}>
+            <SessionState where={shortenHome(journey.projectPath)} conversation={conversation} />
+          </Transcript>
           <Composer journeyId={journey.id} conversation={conversation} />
         </>
       )}
@@ -55,35 +57,26 @@ export function Conversation({ journey }: { journey: Journey }) {
   );
 }
 
-function Transcript({ where, conversation }: { where: string; conversation: ConversationState | undefined }) {
-  const log = useRef<HTMLDivElement>(null);
-  const rows = conversation?.rows ?? NO_ROWS;
-  useEffect(() => {
-    log.current?.scrollTo({ top: log.current.scrollHeight });
-  }, [rows]);
-
-  return (
-    <div ref={log} role="log" aria-label="Transcript" className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
-      <div className="mx-auto flex max-w-measure flex-col gap-5">
-        {rows.map((row, index) => (
-          <TranscriptRow key={index} row={row} />
-        ))}
-        {conversation?.status === "opening" ? (
-          <p className="flex items-center gap-2 text-ui text-muted">
-            <Pulse />
-            Opening in {where}…
-          </p>
-        ) : null}
-        {conversation?.status === "failed" ? (
-          <div className="flex flex-col gap-1 text-body">
-            <p>The session could not open in {where}.</p>
-            {conversation.failure ? <p className="font-mono text-ui text-muted">{conversation.failure}</p> : null}
-            <p className="text-ui text-muted">Your message is back in the composer: send it again to retry.</p>
-          </div>
-        ) : null}
+/** What the conversation says about its session below the rows: opening, or an open that failed and what to do. */
+function SessionState({ where, conversation }: { where: string; conversation: ConversationState | undefined }) {
+  if (conversation?.status === "opening") {
+    return (
+      <p className="flex items-center gap-2 text-ui text-muted">
+        <Pulse />
+        Opening in {where}…
+      </p>
+    );
+  }
+  if (conversation?.status === "failed") {
+    return (
+      <div className="flex flex-col gap-1 text-body">
+        <p>The session could not open in {where}.</p>
+        {conversation.failure ? <p className="font-mono text-ui text-muted">{conversation.failure}</p> : null}
+        <p className="text-ui text-muted">Your message is back in the composer: send it again to retry.</p>
       </div>
-    </div>
-  );
+    );
+  }
+  return null;
 }
 
 function NoProjectPath({ journey }: { journey: Journey }) {

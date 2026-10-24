@@ -1,7 +1,7 @@
 import type { SessionEvent } from "@mirror-desktop/protocol";
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { type ExtensionFailure, type FakeHost, serveFakeHost } from "../testing/fakeHost.ts";
 import { exactly, messageBox, transcript } from "../testing/queries.ts";
@@ -25,6 +25,128 @@ const idle = () => screen.findByRole("button", { name: "Garden", busy: false });
 
 const isTool = (type: "tool_start" | "tool_end", id: string) => (event: SessionEvent) =>
   event.type === type && event.toolCallId === id;
+
+const isDelta = (start: string) => (event: SessionEvent) => event.type === "text_delta" && event.delta.startsWith(start);
+
+/**
+ * The transcript's scroll, which happy-dom does not lay out: a log 400 px tall
+ * over `height` px of rows. `scrollTo` lands at the bottom, as an instant
+ * scroll does; `scrollUp` is the person moving the view up, firing the scroll
+ * event a real view fires.
+ */
+function scrollOf(log: HTMLElement) {
+  const metrics = { scrollTop: 0, scrollHeight: 1000, clientHeight: 400 };
+  Object.defineProperty(log, "scrollTop", { configurable: true, get: () => metrics.scrollTop, set: (top: number) => void (metrics.scrollTop = top) });
+  Object.defineProperty(log, "scrollHeight", { configurable: true, get: () => metrics.scrollHeight });
+  Object.defineProperty(log, "clientHeight", { configurable: true, get: () => metrics.clientHeight });
+  const scrollTo = vi.spyOn(log, "scrollTo").mockImplementation(() => {
+    metrics.scrollTop = Math.max(metrics.scrollHeight - metrics.clientHeight, 0);
+  });
+  return {
+    scrollTo,
+    grow: (by: number) => void (metrics.scrollHeight += by),
+    scrollUp: (by: number) => {
+      metrics.scrollTop = Math.max(metrics.scrollTop - by, 0);
+      fireEvent.scroll(log);
+    },
+    /** A scroll event the view fires with nobody moving it, after the rows grew under it. */
+    echo: () => fireEvent.scroll(log),
+  };
+}
+
+const jumpButton = () => screen.queryByRole("button", { name: "Jump to latest" });
+
+describe("an answer in the transcript", () => {
+  it("is Markdown while it streams and once it is done, with no syntax shown as text", async () => {
+    const { host } = await converse("Show me the tides", loadTurn("markdown-answer"), { held: true });
+    const turn = host.heldTurn();
+
+    turn.releaseThrough(isDelta("des\n\n"));
+    expect(await within(transcript()).findByRole("heading", { level: 1, name: "Tides" })).toBeTruthy();
+
+    turn.release();
+    await idle();
+    expect(within(transcript()).getByRole("heading", { level: 2, name: "Steps" })).toBeTruthy();
+    expect(within(transcript()).getByRole("link", { name: "the almanac" })).toBeTruthy();
+    expect(within(transcript()).getByRole("table")).toBeTruthy();
+    const prose = [...transcript().querySelectorAll("h1, h2, h3, p, li, th, td, blockquote")].map((element) => element.textContent).join("\n");
+    expect(prose).not.toMatch(/\*\*|`|~~|^#|\]\(/m);
+  });
+
+  it("never turns the answer's raw HTML into elements, even with a tag split across deltas", async () => {
+    const { host } = await converse("Try the edges", loadTurn("unsafe-answer"), { held: true });
+    const turn = host.heldTurn();
+
+    turn.releaseThrough((event) => event.type === "text_delta" && event.delta.endsWith("<scr"));
+    expect(await within(transcript()).findByText("<scr")).toBeTruthy();
+    expect(transcript().querySelector("script, img, iframe")).toBeNull();
+
+    turn.release();
+    await idle();
+    expect(within(transcript()).getByText("<script>alert(1)</script>")).toBeTruthy();
+    expect(transcript().querySelector("script, img, iframe, [target]")).toBeNull();
+    expect([...transcript().querySelectorAll("[href]")].map((link) => link.getAttribute("href"))).toEqual([
+      "https://example.test/b",
+      "https://elsewhere.test/x",
+    ]);
+  });
+});
+
+describe("following the stream", () => {
+  it("follows while the view is at the bottom, holds when the person scrolls up, and offers the way back", async () => {
+    const { host, user } = await converse("Show me the tides", loadTurn("markdown-answer"), { held: true });
+    const turn = host.heldTurn();
+    const view = scrollOf(transcript());
+
+    turn.releaseThrough(isDelta("des\n\n"));
+    await within(transcript()).findByRole("heading", { name: "Tides" });
+    await waitFor(() => expect(view.scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: "instant" }));
+    expect(jumpButton()).toBeNull();
+
+    // The view's own scroll reports after the rows grew under it: not a move up.
+    view.grow(300);
+    view.echo();
+    expect(jumpButton()).toBeNull();
+
+    view.scrollUp(400);
+    expect(await screen.findByRole("button", { name: "Jump to latest" })).toBeTruthy();
+    view.scrollTo.mockClear();
+    turn.releaseThrough(isDelta("## Steps"));
+    await within(transcript()).findByRole("heading", { name: "Steps" });
+    expect(view.scrollTo).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Jump to latest" }));
+    expect(view.scrollTo).toHaveBeenCalledTimes(1);
+    expect(jumpButton()).toBeNull();
+
+    view.scrollTo.mockClear();
+    turn.release();
+    await idle();
+    expect(view.scrollTo).toHaveBeenCalled();
+    expect(jumpButton()).toBeNull();
+  });
+
+  it("leaves the thinking open under a person who scrolled up, and folds it once they follow again", async () => {
+    const { host, user } = await converse("Which bed first?", loadTurn("thinking-answer"), { held: true });
+    const turn = host.heldTurn();
+    const view = scrollOf(transcript());
+
+    turn.releaseThrough((event) => event.type === "thinking_delta");
+    const fold = await screen.findByRole("button", { name: "Thinking…" });
+    view.scrollUp(400);
+    await screen.findByRole("button", { name: "Jump to latest" });
+
+    turn.releaseThrough((event) => event.type === "text_delta");
+    await within(transcript()).findByText("Start with");
+    expect(fold.getAttribute("aria-expanded")).toBe("true");
+
+    await user.click(screen.getByRole("button", { name: "Jump to latest" }));
+    await waitFor(() => expect(fold.getAttribute("aria-expanded")).toBe("false"));
+
+    turn.release();
+    await idle();
+  });
+});
 
 describe("a tool call in the transcript", () => {
   it("is Pi's folded form on the ground of its state, and opens on its arguments and its whole result", async () => {
