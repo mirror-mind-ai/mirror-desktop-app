@@ -270,7 +270,7 @@ describe("host events", () => {
 
     expect(entry("beds")?.rows).toEqual([
       { kind: "user", text: "Plant" },
-      { kind: "assistant", text: "Seeds.", done: false },
+      { kind: "assistant", text: "Seeds.", thinking: "", done: false },
     ]);
     expect(entry("garden")?.rows).toEqual([{ kind: "user", text: "Hello" }]);
     expect(entry("garden")?.running).toBe(false);
@@ -290,7 +290,12 @@ describe("host events", () => {
     const { client } = openingHost();
     await sendInto(client, "garden", "Hello");
     applyHostEvent({ type: "session.extension_error", sessionId: "session-1", extension: "mirror", event: "agent_end", message: "the database is locked" });
-    expect(entry("garden")?.rows.at(-1)).toEqual({ kind: "notice", text: "mirror failed on agent_end: the database is locked" });
+    expect(entry("garden")?.rows.at(-1)).toEqual({
+      kind: "notice",
+      name: "Extension failed",
+      tone: "notice",
+      text: "mirror on agent_end: the database is locked",
+    });
   });
 
   it("ignores events that belong to no conversation, such as a sign-in flow's", () => {

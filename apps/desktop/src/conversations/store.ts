@@ -17,7 +17,7 @@ import { create } from "zustand";
 
 import { failureOf, type HostConnection } from "../host/client.ts";
 import { registerStore } from "../stores/registry.ts";
-import { reduceRows, type Row } from "./transcript.ts";
+import { extensionNotice, reduceRows, type Row } from "./transcript.ts";
 
 export interface Session {
   readonly id: string;
@@ -166,7 +166,7 @@ export function applyHostEvent(event: HostEvent): void {
   // answer's diagnostics carry what failed to load.
   if (journeyId === undefined) return;
   if (event.type === "session.extension_error") {
-    const notice: Row = { kind: "notice", text: `${event.extension} failed on ${event.event}: ${event.message}` };
+    const notice = extensionNotice(event);
     update(journeyId, (conversation) => ({ ...conversation, rows: [...conversation.rows, notice] }));
     return;
   }

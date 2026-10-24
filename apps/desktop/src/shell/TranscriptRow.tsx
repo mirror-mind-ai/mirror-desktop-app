@@ -1,4 +1,5 @@
 import type { Row } from "../conversations/transcript.ts";
+import { toolPreview } from "../transcript/format.ts";
 import { Pulse } from "./Pulse.tsx";
 
 /**
@@ -20,18 +21,21 @@ export function TranscriptRow({ row }: { row: Row }) {
               <Pulse />
             </span>
           ) : null}
-          {row.errorMessage ? <p className="mt-1 text-ui text-danger">{row.errorMessage}</p> : null}
         </div>
       );
     case "tool":
       return (
         <p className="rounded-control border border-hairline px-3 py-1.5 font-mono text-ui text-muted">
-          {row.done ? (row.isError ? "✗" : "✓") : "…"} {row.name} {row.summary}
+          {row.done ? (row.isError ? "✗" : "✓") : "…"} {row.name} {toolPreview(row.args)}
           {row.durationMs !== undefined ? ` · ${row.durationMs} ms` : ""}
         </p>
       );
     case "notice":
-      return <p className="text-ui text-notice">{row.text}</p>;
+      return (
+        <p className={row.tone === "danger" ? "text-ui text-danger" : "text-ui text-notice"}>
+          {row.name}: {row.text}
+        </p>
+      );
     case "diagnostic":
       return <p className="text-meta text-muted">{row.text}</p>;
   }
