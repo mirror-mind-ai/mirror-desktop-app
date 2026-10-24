@@ -89,7 +89,18 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
 - **Colors and type come from the tokens** in `apps/desktop/src/styles/app.css`
   (D15), never from Tailwind's palette or sizes, which the stylesheet clears.
   A new color or size is a token first, in both themes;
-  `styles/tokens.test.ts` holds every class in the app to the tokens.
+  `styles/tokens.test.ts` holds every class in the app to the tokens. Pi's
+  transcript roles (Markdown, syntax, thinking, the tool grounds) are tokens
+  too, and highlighted code is colored by Pi's mapping, one block of
+  `app.css`. Tailwind emits a token only for a class it finds whole in a
+  source, so a class name is never assembled from pieces.
+- **The model's text is input** (D16). The transcript
+  (`apps/desktop/src/transcript/`) never renders raw HTML (no `rehype-raw`),
+  keeps a link's target only for `https` and opens it through the opener,
+  never in the window, shows an image as its alt text, and marks hidden
+  characters in code. A bump of `react-markdown`, `remark-gfm` or
+  `rehype-highlight` is reviewed as a security change; the tests over the
+  `unsafe-answer` fixture are its net.
 - **Selecting a Journey writes nothing** (D14). The first send opens its
   session; navigation never starts Pi or binds a Mirror conversation.
 - **TDD for behavior.** A feature or fix starts with a failing test; error
@@ -107,8 +118,13 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
   - A world scripts the real host's failures with `failures` (`hello`,
     `journeys.list`, or one Journey's `session.open`), answered until the
     test calls `stopFailing()`; `heldOpens` holds a `session.open` until
-    `heldOpen(journey).release()`. A scripted failure or hold the test never
+    `heldOpen(journey).release()`; a scripted turn's `extensionErrors` are
+    reported after its prompt's answer and before its events, as an
+    extension failing inside Pi. A scripted failure or hold the test never
     exercised fails it at teardown.
+  - happy-dom applies no CSS. A test that must prove which rule of
+    `app.css` styles an element reads the stylesheet with
+    `testing/stylesheet.ts`, which models the cascade those rules need.
   - Find elements by role, label or text, the way a person does; use
     `data-testid` only where nothing accessible names the element. Act
     through `userEvent.setup()`; wait with `findBy*`/`waitFor`, never a fixed

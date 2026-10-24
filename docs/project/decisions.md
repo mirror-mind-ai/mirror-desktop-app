@@ -205,3 +205,47 @@ light canvas and 4.47:1 on the light sidebar, under the 4.5:1 Pi's own docs
 keep for body text. It is taken two points darker in OKHSL, same hue and
 saturation (`#636c71`, 4.63:1 and 4.80:1): a departure from Pi's value that
 keeps Pi's rule, decided in TS2's debt review.
+
+## D16 — The transcript draws Pi's Markdown on Pi's engine, and treats the model's text as input
+
+**Date:** 2026-10-24 · **Story:** [CV1.DS1.US2](roadmap/cv1-daily-use/cv1-ds1-the-conversation-shell/cv1-ds1-us2-transcript-rendering/index.md)
+
+An answer renders through `react-markdown` 10.1.0 with `remark-gfm` 4.0.1
+and `rehype-highlight` 7.0.2 (highlight.js 11, through `lowlight`), pinned
+exactly. D11 named `react-markdown`; GFM is where tables and strikethrough
+live; highlight.js is the engine Pi highlights with. Each element takes the
+role Pi's `getMarkdownTheme()` gives it, as a token carried from Pi's theme
+files (D15). Headings stay at the one reading size and differ by color,
+weight and the air above them, because Pi has no size scale. A paragraph
+keeps its soft line breaks and a code block wraps its long lines, as Pi's
+terminal does.
+
+Code is highlighted only when the fence names a language highlight.js
+knows: Pi never guesses one, because auto-detection colors prose. Any other
+block is in Pi's code-block color. Pi's mapping from token to role, keyed
+for the highlight.js 10 that Pi runs, is carried by each class's first name;
+where 10 and 11 name the same token differently, by what Pi draws, read
+from Pi's own `highlightCode`: a class name in the function color, `this` in
+the type color. A tool call takes Pi's generic folded form, its constants
+carried in `transcript/format.ts`.
+
+The text is a model's, and the model reads files, tool output and pages an
+attacker can shape, so the transcript treats it as input:
+
+- raw HTML is shown as text (react-markdown's default, kept: no `rehype-raw`);
+- only `https` links keep a target, because the opener may open nothing
+  else; a click or a middle click opens the system browser and never
+  navigates the window, and a link whose text is a URL to another host
+  names the real one;
+- an image is its alt text: it would fetch from wherever the model pointed;
+- in code, bidi controls and zero-width characters show as markers, and Copy
+  copies the fence exactly as written;
+- a block over 32 KB is not highlighted, so no block can freeze the window
+  while it streams;
+- thinking is plain text, not a second Markdown parser.
+
+This posture rests on react-markdown's defaults. A bump of `react-markdown`,
+`remark-gfm` or `rehype-highlight` is a security change and is reviewed as
+one; the tests over the `unsafe-answer` fixture are its net. The window
+itself does not yet refuse a navigation the transcript failed to prevent;
+that guard belongs to the Rust shell, a later story's.

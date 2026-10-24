@@ -21,9 +21,9 @@ state:
 npx vitest run apps/desktop/src/conversations/transcript.test.ts --project desktop
 npx vitest run apps/desktop/src/transcript --project desktop
 npx vitest run apps/desktop/src/styles/tokens.test.ts --project desktop
-npx vitest run --project desktop --sequence.shuffle
-npx vitest run --project desktop --sequence.shuffle
-npx vitest run --project desktop --sequence.shuffle
+npx vitest run --project desktop --sequence.shuffle --sequence.seed=1
+npx vitest run --project desktop --sequence.shuffle --sequence.seed=2
+npx vitest run --project desktop --sequence.shuffle --sequence.seed=3
 ```
 
 Expected: every run green; no `console.error`, no violation, no fixture
@@ -71,4 +71,34 @@ hover.
 
 ## Validation Evidence
 
-Pending implementation and validation.
+**Automated, 2026-10-24.** `npm run typecheck && npm test && npm run build
+&& git diff --check`: green, 248 tests (12 node, 236 desktop); the desktop
+project green under shuffle seeds 1, 2 and 3. Each rule the story stands on
+was broken once by hand and its test failed by name: the unknown-language
+pass removed, the `this` rule taken out of the mapping, the image override
+removed, react-markdown's default `urlTransform` restored, the link's
+`preventDefault` removed, the thinking's fold disabled, a tool ground
+swapped, the follow rule's "only a move up" guard removed, and the hold
+removed. Each file was restored.
+
+What changed in tests that existed: the reducer's and the store's tests take
+the new row shapes (thinking on the answer, the call's arguments and result,
+named notices). Two UI tests now name the paragraph they read, because the
+answer is a `<p>` inside its row and, mid-stream, the partial text is
+already Markdown (`App.test.tsx`, `Conversation.test.tsx`). No other test
+changed.
+
+Found while building, and settled in the plan as corrections: Pi draws a
+class name in the function color, not the type color; `rehype-highlight`
+adds `hljs` before it tries a language, so an unknown one is detected by
+the message it leaves; Pi keeps a paragraph's soft line breaks; and Pi ends
+a stopped message with "Request was aborted", which is not named a provider
+error.
+
+Two things for Debt Review. The JavaScript bundle grew from 397 KB to
+744 KB (gzip 119 KB to 225 KB), almost all of it highlight.js's 37 common
+grammars and the unified tree, and Vite now warns about a chunk over
+500 KB. TD-001's trigger did not fire: every fixture's assistant message
+has one text block.
+
+**Navigator.** Pending: the route above, in the real app.
