@@ -47,6 +47,7 @@ import {
 } from "./mirror.ts";
 import { materializeRuntimeBin } from "./runtimeBin.ts";
 import { SessionBusyError, SessionNotFoundError, SessionOpenError, SessionRegistry } from "./sessions.ts";
+import { shutdownHost } from "./shutdown.ts";
 
 const MIRROR_PACKAGE_JSON = new URL(import.meta.resolve("mirror-mind/package.json"));
 const MIRROR_VERSION = (JSON.parse(readFileSync(MIRROR_PACKAGE_JSON, "utf8")) as { version: string })
@@ -211,14 +212,20 @@ httpServer.listen(0, "127.0.0.1", () => {
   process.stdout.write(`${JSON.stringify({ event: "listening", port, protocolVersion: PROTOCOL_VERSION })}\n`);
 });
 
-// Sessions close first so every extension sees `session_shutdown` before the
-// process goes; a close that hangs is cut short after a bound, never waited on.
+// Sessions close first, every connection is told goodbye, then the process
+// goes; nothing is waited on without a bound (shutdown.ts). Once, whichever
+// signal arrives first.
+let stopping = false;
 function shutdown(): void {
-  const closing = sessions.closeAll();
-  const bound = new Promise<void>((resolve) => setTimeout(resolve, 10_000));
-  void Promise.race([closing, bound]).then(() => {
-    server.close();
-    httpServer.close(() => process.exit(0));
+  if (stopping) return;
+  stopping = true;
+  void shutdownHost({
+    closeSessions: () => sessions.closeAll(),
+    server,
+    httpServer,
+    exit: () => process.exit(0),
+    sessionsBoundMs: 10_000,
+    goodbyeBoundMs: 2_000,
   });
 }
 
