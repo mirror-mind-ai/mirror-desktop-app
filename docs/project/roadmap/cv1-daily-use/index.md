@@ -23,7 +23,7 @@ them.
 
 | Code | Delivery Story | Outcome | Status |
 |------|----------------|---------|--------|
-| [CV1.DS1](cv1-ds1-the-conversation-shell/index.md) | The Conversation Shell | The screens a person lives in: Journeys in a sidebar, a transcript that renders what Pi produces, a composer that feels right — built on stores, tokens and a fake host that makes the UI testable | 🟡 In progress |
+| [CV1.DS1](cv1-ds1-the-conversation-shell/index.md) | The Conversation Shell | The screens a person lives in: Journeys in a sidebar, a transcript that renders what Pi produces, a composer that feels right — built on stores, tokens and a fake host that makes the UI testable | ✅ Done — 2026-10-28 |
 | [CV1.DS2](cv1-ds2-sessions-and-live-control/index.md) | Sessions and Live Control | A Journey's sessions listed, resumed and started; a running turn steered, followed up and stopped; the model chosen; the app quitting and restarting without losing anything | 🟡 Planned |
 
 ## Done Condition

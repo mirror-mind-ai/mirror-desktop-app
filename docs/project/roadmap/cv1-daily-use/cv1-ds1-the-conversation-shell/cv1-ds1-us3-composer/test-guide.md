@@ -120,6 +120,11 @@ tells a crash (`pkill -9`, step 6) from a stop (`pkill`, step 6b); the
 story's own path, the crash, then passed: the loss worded without a code,
 the cut-off line, Try again, no composer.
 
+**Navigator, 2026-10-28: accepted.** Steps 6b, 7 and 8 passed on the
+relaunched app: the stop worded as a clean close with its code and reason,
+Try again reporting the host did not accept the connection, and a dead key
+composing before Enter.
+
 For Debt Review: TD-004 is already written (what a reconnection finds),
 and TD-002 extended for `onClose`. `goAway()` settles a held open but not
 a held turn: a turn scripted and never prompted is a test's mistake

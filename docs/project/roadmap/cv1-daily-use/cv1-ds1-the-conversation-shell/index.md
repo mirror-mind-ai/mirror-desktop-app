@@ -2,7 +2,7 @@
 
 # CV1.DS1 — The Conversation Shell
 
-**Status:** 🟡 In progress
+**Status:** ✅ Done — 2026-10-28
 **Type:** Delivery Story
 
 ---
@@ -24,7 +24,7 @@ and a fake host so the UI is proven without a model.
 | CV1.DS1.US1 | Shell and Journeys sidebar | User Story | The app opens on a sidebar of active Journeys grouped by hierarchy and a conversation area; selecting a Journey shows it, and the first send opens a session in its project path; switching keeps each conversation and its draft; a running Journey is marked; every empty and failure state names its next step; stores replace the console's component state | ✅ Done — 2026-10-22 |
 | CV1.DS1.TS2 | Mirror's tokens and theme | Technical Story | The layout, typography and dark/light tokens are the product's, not a placeholder's: Pi's look in Monaco, both themes carried from Pi's own palettes (D15), type roles, state and motion tokens, a theme preference that follows the system until chosen and survives a relaunch, and a launch with no flash | ✅ Done — 2026-10-24 |
 | CV1.DS1.US2 | Transcript rendering | User Story | Assistant prose renders as Markdown in Pi's colors and styles, its text treated as input: raw HTML as text, only https links, opened outside the window; code highlighted through Pi's mapping, wrapped and copyable; tool calls in Pi's folded form, opening on their arguments and whole result; thinking muted and folding once the answer begins; retries and provider errors named; the view follows the stream only at the bottom and offers a way back to the latest (D16) | ✅ Done — 2026-10-24 |
-| CV1.DS1.US3 | Composer | User Story | Enter sends, Shift+Enter breaks a line, Escape stops; the composer states plainly when it cannot send and why (no model, host gone, turn running); drafts already survive switching Journeys (US1); attachments by drag and drop are out of scope here | 🟡 Planned |
+| CV1.DS1.US3 | Composer | User Story | The text box takes focus on pick; Enter sends (not while an IME composes), Shift+Enter breaks a line, Escape stops once from anywhere in the window; while Pi answers the composer says the draft stays and Escape stops it; a host that goes away is noticed and named, a crash told from a stop, the streaming answer settled with a notice, and the area says the conversation was cut off; no model and a host that never came up keep US1's notices; drafts survive switching Journeys (US1); attachments by drag and drop are out of scope | ✅ Done — 2026-10-28 |
 
 ## Done Condition
 

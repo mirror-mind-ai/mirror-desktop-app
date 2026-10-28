@@ -2,7 +2,7 @@
 
 # CV1.DS1.US3 — Composer
 
-**Status:** 🟡 Planned
+**Status:** ✅ Done — 2026-10-28
 **Type:** User Story
 
 ---

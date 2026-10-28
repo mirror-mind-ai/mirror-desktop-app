@@ -2,11 +2,11 @@
 
 ## Status
 
-Blocked
+Passed
 
 ## Automated Checks
 
-- npm run typecheck && npm test && npm run build && git diff --check: green, 270 tests; desktop project green under shuffle seeds 1, 2, 3; each rule broken once by hand and its test failed by name
+- npm run typecheck && npm test && npm run build && git diff --check: green, 272 tests; desktop project green under shuffle seeds 1, 2, 3; each rule broken once by hand and its test failed by name
 
 Checks status: passed
 
@@ -14,15 +14,15 @@ Checks status: passed
 
 Decision: required
 
-Evidence: Pending the Navigator's run of the 8-step route in test-guide.md: Escape through the webview with focus elsewhere, a killed host process seen as an unclean close, a dead key composing
+Evidence: Navigator ran the 9-step route in the window on the automation Journey, 2026-10-28: steps 1-5 passed; step 6 found two defects outside the story (Mirror version pin, host shutdown deadlock), fixed as maintenance 974f219 and 116669f; steps 6, 6b, 7, 8 then passed
 
 ## Navigator Validation
 
-Route: npm run dev on a Journey the Navigator names; the 8 steps in test-guide.md: pick and type without a click, Shift+Enter, the running line and Enter refused, Escape in the box, Escape with focus on Jump to latest, Escape idle and held, pkill the host mid-answer, Try again, a dead key then Enter
+Route: npm run dev on automation; the 9 steps in test-guide.md: pick and type without a click, Shift+Enter, the running line and Enter refused, Escape in the box, Escape with focus elsewhere, Escape idle and held, pkill -9 the host mid-answer (crash), pkill the host (stop), Try again, a dead key then Enter
 
-Navigator accepted: no
+Navigator accepted: yes
 
-Expected observation: Focus lands in the box on pick; the running line stands while Pi answers and Enter sends nothing; Escape stops once from anywhere; the killed host shows the notice with the lost-connection words, the cut-off line and Try again, no Stop or Send, no toast; Try again reports the host did not accept the connection
+Expected observation: Focus lands in the box on pick; the running line stands while Pi answers and Enter sends nothing; Escape stops once from anywhere; a crash shows the lost-connection words, the cut-off line and Try again, no Stop or Send, no toast; a stop shows the clean close with 1001 going away; Try again reports the host did not accept the connection; a composing Enter sends nothing
 
 Pass condition: Every observation in the route's table holds
 
@@ -30,5 +30,5 @@ Fail condition: Any observation does not; Escape clears the draft; a send while 
 
 ## Missing Evidence
 
-- Navigator validation has not been accepted
-<!-- ariad-seal sha256:bcaecd10ea0c208e574de5ded313f92ef1bb06be0a24ae81546a1a7e702f16d2 — Ariad wrote this file and rewrites it only while this line matches the text above it. Edit the file and Ariad will leave it as it is. -->
+- none
+<!-- ariad-seal sha256:19458face9369e2c5ca5f38348521e051843724254c9a4b73e2a5f15a52da85d — Ariad wrote this file and rewrites it only while this line matches the text above it. Edit the file and Ariad will leave it as it is. -->
