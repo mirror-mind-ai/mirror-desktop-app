@@ -67,7 +67,8 @@ unclean close, and a dead key composing.
 | 3 | Still streaming, press Escape with the cursor in the box | The answer stops where it was, as a click on Stop does today; the line is gone; Send is back with the draft kept |
 | 4 | Ask again; while it streams, click "Jump to latest" or a Copy button, then press Escape | Stops the same way: focus outside the box does not matter |
 | 5 | With nothing running, press Escape; then hold Escape down during a streaming answer | Nothing changes and the draft stays; the held key stops the answer once, with no error |
-| 6 | Ask for a long answer; while it streams, kill the host from a terminal: `pkill -f packages/host/src/main.ts` (in dev the shell runs it as `node …/packages/host/src/main.ts`) | Within a moment the area reads "The host could not be reached", then "The connection to the host was lost." in the mono line with no code or empty parentheses, then "Pi was cut off mid-conversation. Relaunch Mirror Desktop to continue.", and Try again; no Stop, no Send, no toast |
+| 6 | Ask for a long answer; while it streams, kill the host from a terminal as a crash: `pkill -9 -f packages/host/src/main.ts` (in dev the shell runs it as `node …/packages/host/src/main.ts`; `-9` is the crash, since plain `pkill` asks the host to stop, which is step 6b) | Within a moment the area reads "The host could not be reached", then "The connection to the host was lost." in the mono line with no code or empty parentheses, then "Pi was cut off mid-conversation. Relaunch Mirror Desktop to continue.", and Try again; no Stop, no Send, no toast |
+| 6b | Relaunch; ask for a long answer; while it streams, ask the host to stop, as the app's quit does: `pkill -f packages/host/src/main.ts` | Within a few seconds (the session's shutdown reaches Mirror first) the same screen, with "The host closed the connection (1001 going away)." in the mono line |
 | 7 | Press Try again | "The host could not be reached" with "The host did not accept the connection.", since nothing respawns the host today (plan D6); relaunch the app to continue |
 | 8 | Type "é" through a dead key (´ then e) and press Enter while the accent is still pending | Nothing is sent until the composition ends; then Enter sends |
 
@@ -103,6 +104,21 @@ composer's branch could not be reached by a UI test, since the prompt's
 reply cannot be held); the sign-in panel keeps its own copy of the rule,
 unproven as its flows are (TD-002). The host store's `lostAfterReady` is
 what the notice's line reads.
+
+**Navigator, 2026-10-28, steps 1–5 passed; step 6 found two defects outside
+the story, fixed as maintenance in their own commits before the route went
+on.** First, no session could bind to Mirror: the host pinned `mirror-mind`
+0.35.0 while the Navigator's database was at 0.37.0's schema (974f219, with
+one real turn through the host on `automation`). Second, step 6 as first
+written used `pkill`, which sends SIGTERM, and the host's graceful shutdown
+closed its sessions, then waited on the window's own socket forever without
+having told it anything: the stream stopped mid-word, the host stayed
+alive, and the UI, correctly, saw no close. The host's shutdown now says
+goodbye to every connection with `1001 going away`, bounded (116669f, with
+the host package's first test and a live SIGTERM mid-turn). The route now
+tells a crash (`pkill -9`, step 6) from a stop (`pkill`, step 6b); the
+story's own path, the crash, then passed: the loss worded without a code,
+the cut-off line, Try again, no composer.
 
 For Debt Review: TD-004 is already written (what a reconnection finds),
 and TD-002 extended for `onClose`. `goAway()` settles a held open but not
