@@ -92,6 +92,17 @@ listed per Journey, with "resume the most recent" as the default door; a
 new session is a deliberate act. Branching and forking come from Pi's
 `SessionManager` when a screen needs them.
 
+**As built, CV1.DS2.US1 (2026-10-29).** A Journey's sessions are the files
+in its project path's folder, the list `pi -r` shows there, whichever
+Journey or terminal wrote them; two Journeys sharing a project path share
+it. The host reads the head of each file for the list (760 sessions in
+under a tenth of a second, where Pi's own list reads every file whole) and
+a session's branch for its transcript, bounded from the end. A Journey has
+one open session at a time, a rule the host keeps (`sessionPolicy.ts`).
+Resuming binds Mirror as `pi -r` does: a new conversation when the file's
+last one ended, the same one while it is open. One file written by two
+processes at once is not guarded, since Pi takes no lock (TD-005).
+
 ## D8 — A session is bound to Mirror by name, never guessed
 
 **Date:** 2026-10-20 · **Spike:** [4](spikes/spike-4-journey-binding.md)
@@ -177,6 +188,14 @@ The spike console opened a session on every click, which would have left an
 empty Mirror conversation behind for every look around the sidebar. CV1.DS2
 keeps the rule when sessions are listed and resumed: navigation never starts
 Pi or binds a conversation, a send or an explicit choice does.
+
+**As built, CV1.DS2.US1 (2026-10-29).** Looking now reaches a Journey's
+sessions: picking a Journey shows its most recent session, read from its
+file, and picking a session or "New session" shows that one. All three are
+reads. Even an explicit choice opens nothing: the first send opens the
+session shown, resuming its file or starting a new one, and the host closes
+the Journey's previous session in the same request, so a pick never closes
+a Mirror conversation either.
 
 ## D15 — Mirror's look is carried from Pi, revisable per role
 

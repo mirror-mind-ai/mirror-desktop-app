@@ -83,3 +83,9 @@ rules it out, and says why.
    the screen shows each, so no message is lost or sent unseen. The stopped
    answer itself is already in US2's outcome: kept, and marked by the
    `stopReason` its `message_end` carries.
+
+**Answered so far.** US1 ([plan](cv1-ds2-us1-sessions-per-journey/plan.md),
+D11) builds the read Input 2 needs: `session.transcript`, a session's rows
+read from its file, the current view of a session no turn is running. TS1
+decides what a reconnected UI reads first, and US2 what a turn in flight
+adds. Inputs 1 and 3 are not US1's: they stay with US2 and TS1.

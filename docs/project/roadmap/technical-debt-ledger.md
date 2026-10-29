@@ -45,6 +45,11 @@ When debt is deferred, record the defer reason and revisit trigger.
     together. Settling it here would guess their answer.
   - **Revisit trigger:** CV1.DS2.TS1, or the first change that lets the UI
     reach a second host in the app.
+  - **Note, CV1.DS2.US1 (2026-10-29):** half of the recommendation now
+    exists. A conversation knows which session it shows apart from the one
+    it has open, and the next send resumes the shown session from its file.
+    What remains is TS1's: on a reconnection, drop the old host's sessions
+    and keep what each conversation shows.
 - **TD-005.**
   - **Defer reason:** the exposure is older than US1, which made it
     reachable: a session has stayed open for the app run since CV1.DS1.US1
