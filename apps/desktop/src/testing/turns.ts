@@ -97,11 +97,18 @@ function parseEvent(name: string, index: number, raw: unknown): SessionEvent {
   for (const key of Object.keys(raw as object)) {
     if (!(key in parsed.data)) throw new Error(`${where}: unknown field "${key}"`);
   }
-  const text = JSON.stringify(raw);
-  for (const { problem, pattern } of FORBIDDEN_CONTENT) {
-    if (pattern.test(text)) throw new Error(`${where}: ${problem}`);
-  }
+  const problem = contentProblem(JSON.stringify(raw));
+  if (problem) throw new Error(`${where}: ${problem}`);
   return parsed.data;
+}
+
+/**
+ * What makes `text` unfit for a fixture: a real home directory or something
+ * shaped like a secret. The net every invented input passes, a turn's events
+ * and a world's sessions alike.
+ */
+export function contentProblem(text: string): string | undefined {
+  return FORBIDDEN_CONTENT.find(({ pattern }) => pattern.test(text))?.problem;
 }
 
 function checkShape(name: string, events: readonly SessionEvent[]): void {

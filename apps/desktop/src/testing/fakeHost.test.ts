@@ -2,7 +2,7 @@ import { type HostEvent, PROTOCOL_VERSION, type SessionEvent } from "@mirror-des
 import { describe, expect, it, vi } from "vitest";
 
 import { HostClient, HostRequestError, hostEndpoint } from "../host/client.ts";
-import { endFakeHosts, outboundProblem, serveFakeHost, type World } from "./fakeHost.ts";
+import { endFakeHosts, outboundProblem, type ScriptedSession, serveFakeHost, type World } from "./fakeHost.ts";
 import { takeLog } from "./traffic.ts";
 import { take } from "./violations.ts";
 
@@ -453,5 +453,154 @@ describe("the fake host going away", () => {
 
     endFakeHosts();
     expect(take()).toEqual([]);
+  });
+});
+
+describe("the fake host's sessions on disk", () => {
+  const folder = "/Users/test/.pi/agent/sessions/--Users-test-garden--";
+  const tomatoes: ScriptedSession = {
+    file: `${folder}/tomatoes.jsonl`,
+    id: "garden-tomatoes",
+    title: "Plant the tomatoes",
+    created: Date.UTC(2025, 9, 29, 9),
+    modified: Date.UTC(2025, 9, 29, 10),
+    entries: [
+      { kind: "user", text: "Plant the tomatoes" },
+      { kind: "assistant", text: "Planted in the north bed.", thinking: "", stopReason: "stop" },
+    ],
+    earlier: 3,
+  };
+  const roses: ScriptedSession = {
+    file: `${folder}/roses.jsonl`,
+    id: "garden-roses",
+    title: "Prune the roses",
+    created: Date.UTC(2025, 9, 20, 9),
+    modified: Date.UTC(2025, 9, 20, 10),
+    entries: [{ kind: "user", text: "Prune the roses" }],
+  };
+  const withSessions = (overrides: Partial<World> = {}) => world({ sessions: { garden: [roses, tomatoes] }, ...overrides });
+  const summary = ({ file, id, title, created, modified }: ScriptedSession) => ({ file, id, title, created, modified });
+
+  it("lists a Journey's sessions newest first, and none for a Journey that has none", async () => {
+    const host = serveFakeHost(
+      withSessions({ journeys: [...world().journeys, { id: "beds", name: "Beds", status: "active", description: "", projectPath: "/Users/test/beds" }] }),
+    );
+    const { client } = await connected(host.endpoint);
+
+    await expect(client.request({ type: "sessions.list", journey: "garden" })).resolves.toEqual({
+      type: "sessions.list",
+      journey: "garden",
+      sessions: [summary(tomatoes), summary(roses)],
+    });
+    await expect(client.request({ type: "sessions.list", journey: "beds" })).resolves.toEqual({ type: "sessions.list", journey: "beds", sessions: [] });
+  });
+
+  it("reads a session's transcript, and refuses a file that is not one of the Journey's as the real host does, recording it", async () => {
+    const host = serveFakeHost(withSessions());
+    const { client } = await connected(host.endpoint);
+
+    await expect(client.request({ type: "session.transcript", journey: "garden", sessionFile: tomatoes.file })).resolves.toEqual({
+      type: "session.transcript",
+      sessionFile: tomatoes.file,
+      entries: tomatoes.entries,
+      earlier: 3,
+    });
+    await expect(client.request({ type: "session.transcript", journey: "garden", sessionFile: `${folder}/other.jsonl` })).rejects.toMatchObject({
+      code: "session_open_failed",
+      message: "That file is not one of the Journey's sessions.",
+    });
+    expect(take()).toEqual([{ kind: "unscripted", detail: expect.stringContaining("not one of garden's sessions") }]);
+  });
+
+  it("resumes a session by its file, under the session's own id", async () => {
+    const host = serveFakeHost(withSessions());
+    const { client } = await connected(host.endpoint);
+
+    await expect(client.request({ type: "session.open", journey: "garden", sessionFile: roses.file })).resolves.toMatchObject({
+      sessionId: "garden-roses",
+      sessionFile: roses.file,
+      journey: "garden",
+    });
+  });
+
+  it("closes the Journey's open session when it opens another, and refuses while that one answers", async () => {
+    const host = serveFakeHost(withSessions({ turns: [{ prompt: "Hello", events: answer("Hello"), held: true }] }));
+    const { client } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden" });
+    await client.request({ type: "session.prompt", sessionId: "session-1", text: "Hello" });
+
+    await expect(client.request({ type: "session.open", journey: "garden", sessionFile: tomatoes.file })).rejects.toMatchObject({
+      code: "session_busy",
+    });
+    expect(host.closedSessions).toEqual([]);
+
+    host.heldTurn().release();
+    await expect(client.request({ type: "session.open", journey: "garden", sessionFile: tomatoes.file })).resolves.toMatchObject({
+      sessionId: "garden-tomatoes",
+    });
+    expect(host.closedSessions).toEqual(["session-1"]);
+  });
+
+  it("refuses a file another Journey has open", async () => {
+    const beds = { id: "beds", name: "Beds", status: "active", description: "", projectPath: "/Users/test/garden" };
+    const host = serveFakeHost(withSessions({ journeys: [...world().journeys, beds], sessions: { garden: [tomatoes], beds: [tomatoes] } }));
+    const { client } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden", sessionFile: tomatoes.file });
+
+    await expect(client.request({ type: "session.open", journey: "beds", sessionFile: tomatoes.file })).rejects.toMatchObject({
+      code: "session_open_failed",
+      message: "That session is already open in this app.",
+    });
+  });
+
+  it("lists a new session once its first prompt is played, titled by it, and reads it back", async () => {
+    const host = serveFakeHost(withSessions(withHello()));
+    const { client } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden" });
+    // Not listed yet: Pi writes a session's file only with its first message.
+    await expect(client.request({ type: "sessions.list", journey: "garden" })).resolves.toMatchObject({ sessions: [{ id: "garden-tomatoes" }, { id: "garden-roses" }] });
+
+    await client.request({ type: "session.prompt", sessionId: "session-1", text: "Hello" });
+    const listed = await client.request({ type: "sessions.list", journey: "garden" });
+    expect(listed).toMatchObject({ sessions: [{ id: "session-1", title: "Hello", file: "/Users/test/.pi/agent/sessions/session-1.jsonl" }, { id: "garden-tomatoes" }, { id: "garden-roses" }] });
+    await expect(client.request({ type: "session.transcript", journey: "garden", sessionFile: "/Users/test/.pi/agent/sessions/session-1.jsonl" })).resolves.toMatchObject({
+      entries: [
+        { kind: "user", text: "Hello" },
+        { kind: "assistant", text: "Tides turn.", thinking: "", stopReason: "stop" },
+      ],
+      earlier: 0,
+    });
+  });
+
+  it("fails the reads of a scripted Journey until the test stops them", async () => {
+    const unreadable = { code: "sessions_unreadable", message: "The session folder could not be read: permission denied." } as const;
+    const host = serveFakeHost(
+      withSessions({
+        failures: [
+          { request: "sessions.list", journey: "garden", error: unreadable },
+          { request: "session.transcript", journey: "garden", error: unreadable },
+        ],
+      }),
+    );
+    const { client } = await connected(host.endpoint);
+    await expect(client.request({ type: "sessions.list", journey: "garden" })).rejects.toThrow(unreadable.message);
+    await expect(client.request({ type: "session.transcript", journey: "garden", sessionFile: roses.file })).rejects.toThrow(unreadable.message);
+
+    host.stopFailing("sessions.list", "garden");
+    host.stopFailing("session.transcript", "garden");
+    await expect(client.request({ type: "sessions.list", journey: "garden" })).resolves.toMatchObject({ type: "sessions.list" });
+    await expect(client.request({ type: "session.transcript", journey: "garden", sessionFile: roses.file })).resolves.toMatchObject({ type: "session.transcript" });
+    expect(take()).toEqual([]);
+  });
+
+  it("refuses a world whose sessions break the protocol, carry real paths or secrets, or name a Journey it cannot list", () => {
+    expect(() => serveFakeHost(world({ sessions: { garden: [{ ...roses, created: Number.NaN }] } }))).toThrow(/sessions\.garden\[0\]/);
+    expect(() => serveFakeHost(world({ sessions: { garden: [{ ...roses, file: "/Users/someone/.pi/roses.jsonl" }] } }))).toThrow(
+      /sessions\.garden\[0\]: a home directory other than \/Users\/test\//,
+    );
+    expect(() =>
+      serveFakeHost(world({ sessions: { garden: [{ ...roses, entries: [{ kind: "user", text: "sk-ant-abcdefghijkl" }] }] } })),
+    ).toThrow(/an API key/);
+    expect(() => serveFakeHost(world({ sessions: { attic: [roses] } }))).toThrow(/sessions names "attic"/);
   });
 });
