@@ -440,12 +440,15 @@ describe("the fake host going away", () => {
     const { client } = await connected(host.endpoint);
     const unclean: boolean[] = [];
     raw.socket.addEventListener("close", (event) => unclean.push(!(event as CloseEvent).wasClean));
-    void client.request({ type: "session.open", journey: "garden" });
+    // The open it holds is never answered: the client fails it by the connection's loss. Its
+    // expectation is attached now, before the loss, or the rejection would go unhandled.
+    const open = expect(client.request({ type: "session.open", journey: "garden" })).rejects.toMatchObject({ code: "connection_lost" });
     await vi.waitFor(() => expect(host.requestsOf("session.open")).toHaveLength(1));
 
     host.goAway();
     await vi.waitFor(() => expect(raw.closes).toEqual([1006]));
     expect(unclean).toEqual([true]);
+    await open;
     await expect(HostClient.connect(host.endpoint)).rejects.toThrow("The host did not accept the connection.");
 
     endFakeHosts();
