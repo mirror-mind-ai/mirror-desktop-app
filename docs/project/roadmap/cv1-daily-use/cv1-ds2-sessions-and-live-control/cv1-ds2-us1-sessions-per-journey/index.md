@@ -2,7 +2,7 @@
 
 # CV1.DS2.US1 — Sessions per Journey
 
-**Status:** 🟡 Planned
+**Status:** ✅ Done — 2026-10-29
 **Type:** User Story
 
 ---
