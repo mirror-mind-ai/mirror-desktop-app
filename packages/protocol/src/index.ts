@@ -13,8 +13,13 @@
 
 import { z } from "zod";
 
-/** Bumped on any breaking change to the schemas below. */
-export const PROTOCOL_VERSION = "0.4.0";
+/**
+ * Bumped on any breaking change to the schemas below. A new field is one:
+ * zod strips a field it does not know, so an older host would quietly ignore
+ * it (an old host given `sessionFile` would open a new session instead of
+ * resuming). The version, checked at hello, is what refuses the mismatch.
+ */
+export const PROTOCOL_VERSION = "0.5.0";
 
 // --- Client → host --------------------------------------------------------
 
@@ -44,6 +49,10 @@ export const JourneysListRequest = z.object({
  * conversation bound from the first message — or for a bare directory. The
  * session is persistent and lives where terminal Pi keeps its own, so the
  * two can see each other's conversations.
+ *
+ * With `sessionFile`, the session resumed is that file, one of the Journey's
+ * sessions; without it, a new one. A Journey has one open session at a time:
+ * opening another closes the one before, so the UI never asks to close it.
  */
 export const SessionOpenRequest = z
   .object({
@@ -51,10 +60,36 @@ export const SessionOpenRequest = z
     journey: z.string().min(1).optional(),
     /** Required without a Journey; with one, overrides the Journey's project path. */
     cwd: z.string().min(1).optional(),
+    sessionFile: z.string().min(1).optional(),
   })
   .refine((request) => request.journey !== undefined || request.cwd !== undefined, {
     message: "session.open needs a journey or a cwd",
+  })
+  .refine((request) => request.sessionFile === undefined || request.journey !== undefined, {
+    message: "session.open resumes a session file only for a Journey",
   });
+
+/**
+ * A Journey's sessions: the files terminal Pi keeps for the Journey's
+ * project path, newest first, the same files `pi -r` lists there. A read:
+ * nothing is opened and nothing is written to Mirror, so looking costs
+ * nothing (D14).
+ */
+export const SessionsListRequest = z.object({
+  type: z.literal("sessions.list"),
+  journey: z.string().min(1),
+});
+
+/**
+ * One of a Journey's sessions, as rows to draw: the end of its branch, read
+ * from the file. A read, like the list. The host refuses a file that is not
+ * one of the Journey's sessions.
+ */
+export const SessionTranscriptRequest = z.object({
+  type: z.literal("session.transcript"),
+  journey: z.string().min(1),
+  sessionFile: z.string().min(1),
+});
 
 /** Send a user prompt to an open session. Accepted, not completed: follow the events. */
 export const SessionPromptRequest = z.object({
@@ -123,6 +158,8 @@ export const ClientRequestBody = z.discriminatedUnion("type", [
   PingRequest,
   JourneysListRequest,
   SessionOpenRequest,
+  SessionsListRequest,
+  SessionTranscriptRequest,
   SessionPromptRequest,
   SessionAbortRequest,
   SessionCloseRequest,
@@ -195,6 +232,59 @@ export const SessionOpenResult = z.object({
   diagnostics: z.array(z.string()),
 });
 
+/** One of a Journey's sessions, as the list shows it. */
+export const SessionSummary = z.object({
+  /** Pi's session file: what a transcript read and a resume name. */
+  file: z.string().min(1),
+  id: z.string().min(1),
+  /** Its name, else its first message's first line; bounded, with no control characters. */
+  title: z.string(),
+  /** When it began (its header) and when its file last changed, in ms since epoch. */
+  created: z.number(),
+  modified: z.number(),
+});
+
+export const SessionsListResult = z.object({
+  type: z.literal("sessions.list"),
+  journey: z.string(),
+  sessions: z.array(SessionSummary),
+});
+
+/**
+ * What a session holds, as the transcript draws it. A tool call carries its
+ * result; a text the host's bound cut ends with a line saying so.
+ */
+export const TranscriptEntry = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("user"), text: z.string() }),
+  z.object({
+    kind: z.literal("assistant"),
+    text: z.string(),
+    thinking: z.string(),
+    stopReason: z.string().optional(),
+    errorMessage: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal("tool"),
+    toolCallId: z.string(),
+    name: z.string(),
+    args: z.unknown(),
+    /** Absent when the file holds the call and no result: the turn ended before the tool did. */
+    result: z.string().optional(),
+    isError: z.boolean().optional(),
+    durationMs: z.number().optional(),
+  }),
+  /** A message an extension chose to show (Pi's displayed custom message), named by its type. */
+  z.object({ kind: z.literal("notice"), name: z.string(), text: z.string() }),
+]);
+
+export const SessionTranscriptResult = z.object({
+  type: z.literal("session.transcript"),
+  sessionFile: z.string(),
+  entries: z.array(TranscriptEntry),
+  /** The user and assistant messages before the first entry, left out by the host's bound. */
+  earlier: z.number().int().nonnegative(),
+});
+
 export const SessionPromptResult = z.object({
   type: z.literal("session.prompt"),
   sessionId: z.string().min(1),
@@ -263,6 +353,8 @@ export const HostResultBody = z.discriminatedUnion("type", [
   PingResult,
   JourneysListResult,
   SessionOpenResult,
+  SessionsListResult,
+  SessionTranscriptResult,
   SessionPromptResult,
   SessionAbortResult,
   SessionCloseResult,
@@ -283,6 +375,7 @@ export const HostError = z.object({
     "session_not_found",
     "session_open_failed",
     "session_busy",
+    "sessions_unreadable",
     "mirror_not_configured",
     "journey_not_found",
     "journey_has_no_project_path",
@@ -420,6 +513,8 @@ export type ClientRequest = z.infer<typeof ClientRequest>;
 export type HostIdentity = z.infer<typeof HostIdentity>;
 export type ModelRef = z.infer<typeof ModelRef>;
 export type SessionOpenResult = z.infer<typeof SessionOpenResult>;
+export type SessionSummary = z.infer<typeof SessionSummary>;
+export type TranscriptEntry = z.infer<typeof TranscriptEntry>;
 export type Journey = z.infer<typeof Journey>;
 export type HostResultBody = z.infer<typeof HostResultBody>;
 export type HostError = z.infer<typeof HostError>;

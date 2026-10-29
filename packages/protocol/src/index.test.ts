@@ -89,9 +89,69 @@ describe("session protocol", () => {
   });
 
   it("names the session failures the UI can act on", () => {
-    for (const code of ["session_not_found", "session_open_failed", "session_busy"]) {
+    for (const code of ["session_not_found", "session_open_failed", "session_busy", "sessions_unreadable"]) {
       expect(HostResponse.parse({ id: "r", error: { code, message: "…" } }).error?.code).toBe(code);
     }
+  });
+});
+
+describe("a Journey's sessions", () => {
+  const file = "/Users/test/.pi/agent/sessions/--Users-test-garden--/2026-10-01T09-00-00-000Z_s1.jsonl";
+
+  it("lists a Journey's sessions by file, id, title and dates", () => {
+    expect(ClientRequest.parse({ id: "r", request: { type: "sessions.list", journey: "garden" } }).request.type).toBe(
+      "sessions.list",
+    );
+    const result = HostResponse.parse({
+      id: "r",
+      result: {
+        type: "sessions.list",
+        journey: "garden",
+        sessions: [{ file, id: "s1", title: "Plant the tomatoes", created: 1, modified: 2 }],
+      },
+    });
+    expect(result.result?.type).toBe("sessions.list");
+    expect(() => ClientRequest.parse({ id: "r", request: { type: "sessions.list" } })).toThrow();
+  });
+
+  it("reads one session's transcript for a Journey, and refuses a read without the Journey", () => {
+    expect(
+      ClientRequest.parse({ id: "r", request: { type: "session.transcript", journey: "garden", sessionFile: file } }).request.type,
+    ).toBe("session.transcript");
+    expect(() => ClientRequest.parse({ id: "r", request: { type: "session.transcript", sessionFile: file } })).toThrow();
+  });
+
+  it("carries the transcript's entries and how many earlier messages were left out", () => {
+    const result = HostResponse.parse({
+      id: "r",
+      result: {
+        type: "session.transcript",
+        sessionFile: file,
+        earlier: 12,
+        entries: [
+          { kind: "user", text: "Plant the tomatoes" },
+          { kind: "assistant", text: "Done.", thinking: "", stopReason: "toolUse" },
+          { kind: "tool", toolCallId: "c1", name: "bash", args: { command: "ls" }, result: "beds", isError: false, durationMs: 4 },
+          { kind: "tool", toolCallId: "c2", name: "read", args: {} },
+          { kind: "assistant", text: "", thinking: "", stopReason: "error", errorMessage: "overloaded" },
+          { kind: "notice", name: "garden-note", text: "Watered." },
+        ],
+      },
+    });
+    expect(result.result?.type).toBe("session.transcript");
+    expect(() =>
+      HostResponse.parse({ id: "r", result: { type: "session.transcript", sessionFile: file, earlier: -1, entries: [] } }),
+    ).toThrow();
+    expect(() =>
+      HostResponse.parse({ id: "r", result: { type: "session.transcript", sessionFile: file, earlier: 0, entries: [{ kind: "system" }] } }),
+    ).toThrow();
+  });
+
+  it("resumes a session file only for a Journey", () => {
+    expect(
+      ClientRequest.parse({ id: "r", request: { type: "session.open", journey: "garden", sessionFile: file } }).request,
+    ).toMatchObject({ sessionFile: file });
+    expect(() => ClientRequest.parse({ id: "r", request: { type: "session.open", cwd: "/Users/test/garden", sessionFile: file } })).toThrow();
   });
 });
 

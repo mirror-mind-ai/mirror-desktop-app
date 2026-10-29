@@ -41,13 +41,16 @@ import {
 import {
   JourneyHasNoProjectPathError,
   JourneyNotFoundError,
+  journeyProjectPath,
   listJourneys,
   loadMirrorConfiguration,
   MirrorNotConfiguredError,
 } from "./mirror.ts";
 import { materializeRuntimeBin } from "./runtimeBin.ts";
+import { listSessions, SessionFileRefusedError, SessionsUnreadableError } from "./sessionIndex.ts";
 import { SessionBusyError, SessionNotFoundError, SessionOpenError, SessionRegistry } from "./sessions.ts";
 import { shutdownHost } from "./shutdown.ts";
+import { readSessionTranscript } from "./transcript.ts";
 
 const MIRROR_PACKAGE_JSON = new URL(import.meta.resolve("mirror-mind/package.json"));
 const MIRROR_VERSION = (JSON.parse(readFileSync(MIRROR_PACKAGE_JSON, "utf8")) as { version: string })
@@ -120,7 +123,15 @@ async function handle(
         return await sessions.open({
           ...(request.journey !== undefined ? { journey: request.journey } : {}),
           ...(request.cwd !== undefined ? { cwd: request.cwd } : {}),
+          ...(request.sessionFile !== undefined ? { sessionFile: request.sessionFile } : {}),
         });
+      // The two reads behind a look (D14): nothing is opened, nothing written to Mirror.
+      case "sessions.list":
+        return { type: "sessions.list", journey: request.journey, sessions: await listSessions(journeyProjectPath(request.journey)) };
+      case "session.transcript": {
+        const transcript = await readSessionTranscript(journeyProjectPath(request.journey), request.sessionFile);
+        return { type: "session.transcript", sessionFile: request.sessionFile, ...transcript };
+      }
       case "session.prompt":
         sessions.prompt(request.sessionId, request.text);
         return { type: "session.prompt", sessionId: request.sessionId };
@@ -157,6 +168,8 @@ function failureOf(cause: unknown): HostError {
   if (cause instanceof SessionNotFoundError) return error("session_not_found", cause.message);
   if (cause instanceof SessionBusyError) return error("session_busy", cause.message);
   if (cause instanceof SessionOpenError) return error("session_open_failed", cause.message);
+  if (cause instanceof SessionFileRefusedError) return error("session_open_failed", cause.message);
+  if (cause instanceof SessionsUnreadableError) return error("sessions_unreadable", cause.message);
   if (cause instanceof MirrorNotConfiguredError) return error("mirror_not_configured", cause.message);
   if (cause instanceof JourneyNotFoundError) return error("journey_not_found", cause.message);
   if (cause instanceof JourneyHasNoProjectPathError) return error("journey_has_no_project_path", cause.message);

@@ -10,6 +10,13 @@
 //
 // Sessions persist where terminal Pi keeps them (`~/.pi/agent/sessions/<cwd>`),
 // so a conversation started here can be resumed with `pi -r` and vice versa.
+// An open names the session file to resume, one of the Journey's sessions
+// (sessionIndex.ts checks it), or none for a new session. A Journey has one
+// open session at a time: an open for it closes the one it had, first
+// (sessionPolicy.ts says when an open is refused instead).
+//
+// Resuming binds a Mirror conversation the way `pi -r` does: the file's own
+// conversation when it is still open, a new one when it ended.
 //
 // A session opened for a Journey is bound to it the way a terminal session
 // is: every command the agent runs sees `MIRROR_SESSION_ID`, so a `mirror …`
@@ -37,6 +44,11 @@ import type { HostEvent, SessionEvent, SessionOpenResult } from "@mirror-desktop
 import { fileURLToPath } from "node:url";
 
 import { bindSessionToJourney, conversationForSession, journeyProjectPath } from "./mirror.ts";
+import { containedSessionFile } from "./sessionIndex.ts";
+import { type OpenSessionFacts, planOpen, SessionBusyError } from "./sessionPolicy.ts";
+import { textOf } from "./transcript.ts";
+
+export { SessionBusyError };
 
 /**
  * The installed Mirror package root; a Pi package (extension + skills) by its
@@ -61,6 +73,8 @@ interface OpenSession {
 export interface OpenSessionRequest {
   journey?: string;
   cwd?: string;
+  /** One of the Journey's session files, to resume; a new session without it. */
+  sessionFile?: string;
 }
 
 export class SessionOpenError extends Error {
@@ -69,10 +83,6 @@ export class SessionOpenError extends Error {
 
 export class SessionNotFoundError extends Error {
   override readonly name = "SessionNotFoundError";
-}
-
-export class SessionBusyError extends Error {
-  override readonly name = "SessionBusyError";
 }
 
 /**
@@ -114,6 +124,14 @@ export class SessionRegistry {
     const journey = request.journey;
     const cwd = request.cwd ?? (journey ? journeyProjectPath(journey) : undefined);
     if (!cwd) throw new SessionOpenError("A session needs a Journey or a directory.");
+    let resumed: string | undefined;
+    if (request.sessionFile !== undefined) {
+      if (!journey) throw new SessionOpenError("A session file is resumed only for a Journey.");
+      resumed = await containedSessionFile(cwd, request.sessionFile);
+    }
+    // Refused before anything closes; then the Journey's open session, if any, is closed.
+    const plan = planOpen(this.#facts(), { ...(journey ? { journey } : {}), ...(resumed ? { file: resumed } : {}) });
+    for (const sessionId of plan.close) await this.close(sessionId);
     const agentDir = getAgentDir();
     let session: AgentSession;
     let diagnostics: string[] = [];
@@ -121,7 +139,7 @@ export class SessionRegistry {
     const journeyContext = { text: "" };
     try {
       const settingsManager = SettingsManager.create(cwd, agentDir);
-      const sessionManager = SessionManager.create(cwd);
+      const sessionManager = resumed ? SessionManager.open(resumed, undefined, cwd) : SessionManager.create(cwd);
       const resourceLoader = new DefaultResourceLoader({
         cwd,
         agentDir,
@@ -278,6 +296,15 @@ export class SessionRegistry {
     await Promise.allSettled([...this.#sessions.keys()].map((id) => this.close(id)));
   }
 
+  #facts(): OpenSessionFacts[] {
+    return [...this.#sessions.entries()].map(([id, open]) => ({
+      id,
+      ...(open.journey ? { journey: open.journey } : {}),
+      file: open.session.sessionManager.getSessionFile() ?? "",
+      streaming: open.session.isStreaming,
+    }));
+  }
+
   #get(sessionId: string): OpenSession {
     const open = this.#sessions.get(sessionId);
     if (!open) throw new SessionNotFoundError(`No open session ${sessionId}.`);
@@ -287,18 +314,6 @@ export class SessionRegistry {
   #emit(event: HostEvent): void {
     for (const listener of this.#listeners) listener(event);
   }
-}
-
-/** Readable text of a message's content: a string, or the text blocks joined. */
-function textOf(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .filter((block): block is { type: "text"; text: string } => {
-      return typeof block === "object" && block !== null && (block as { type?: unknown }).type === "text";
-    })
-    .map((block) => block.text)
-    .join("\n");
 }
 
 /**
