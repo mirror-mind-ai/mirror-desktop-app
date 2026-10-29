@@ -43,13 +43,11 @@
 // teardown does not name it. A test that then reconnects serves a fresh host.
 //
 // A world can script a Journey's sessions on disk, the files the real host
-// lists, reads and resumes (CV1.DS2.US1), checked like a turn's events: by the
-// protocol and by the fixture net. The fake host keeps them as Pi does: a
-// Journey has one open session, and opening another closes it (`closedSessions`
-// says which), or is refused while it answers; a file is open once; a new
-// session is listed, titled by its first prompt, once that prompt is played,
-// as Pi writes a session's file only with its first message; and a session
-// prompted here can be read back, its turns folded into transcript entries.
+// lists, reads and resumes (CV1.DS2.US1); the disk keeps them as Pi does
+// (fakeDisk.ts). The fake host keeps the real host's rules for opening them:
+// a Journey has one open session, and opening another closes it
+// (`closedSessions` says which), or is refused while it answers; and a file is
+// open once.
 
 import {
   AuthProvider,
@@ -63,14 +61,13 @@ import {
   Journey,
   PROTOCOL_VERSION,
   type SessionEvent,
-  SessionSummary,
-  TranscriptEntry,
 } from "@mirror-desktop/protocol";
 
 import { listen, type ServerSide, type SocketPeer, type SocketServer, stopListening } from "./fakeSocket.ts";
 import { scriptIpc } from "./ipcDoor.ts";
 import { log } from "./traffic.ts";
-import { contentProblem, parseTurn } from "./turns.ts";
+import { checkSessions, FakeDisk, type ScriptedSession } from "./fakeDisk.ts";
+import { parseTurn } from "./turns.ts";
 import { record } from "./violations.ts";
 
 export interface ScriptedTurn {
@@ -99,17 +96,7 @@ export type ScriptedFailure =
 /** The requests made for one Journey, whose failures are scripted per Journey. */
 type JourneyRequest = "session.open" | "sessions.list" | "session.transcript";
 
-/** One of a Journey's sessions on disk, as the fake host lists, reads and resumes it. Invented, like a turn. */
-export interface ScriptedSession {
-  readonly file: string;
-  readonly id: string;
-  readonly title: string;
-  readonly created: number;
-  readonly modified: number;
-  readonly entries: readonly TranscriptEntry[];
-  /** The messages before the first entry, which the real host's bound leaves out. */
-  readonly earlier?: number;
-}
+export type { ScriptedSession };
 
 export interface World {
   /** What the host says it is made of; a fixed identity when omitted. */
@@ -148,18 +135,6 @@ type SessionOpen = Extract<ClientRequestBody, { type: "session.open" }>;
 type SessionPrompt = Extract<ClientRequestBody, { type: "session.prompt" }>;
 type SessionsList = Extract<ClientRequestBody, { type: "sessions.list" }>;
 type SessionTranscript = Extract<ClientRequestBody, { type: "session.transcript" }>;
-
-/** A session on the fake host's disk: scripted, or created by an open and listed once prompted. */
-interface DiskSession {
-  readonly file: string;
-  readonly id: string;
-  title: string;
-  created: number;
-  modified: number;
-  entries: TranscriptEntry[];
-  earlier: number;
-  listed: boolean;
-}
 
 interface Connection {
   readonly side: ServerSide;
@@ -252,22 +227,7 @@ function checkWorld(world: World): HostIdentity {
   for (const id of Object.keys(world.sessionCwds ?? {})) {
     if (!journeyOf(id)) throw new Error(`The fake host's world: sessionCwds names "${id}", a Journey the world does not have`);
   }
-  for (const [id, sessions] of Object.entries(world.sessions ?? {})) {
-    if (!journeyOf(id)?.projectPath) {
-      throw new Error(`The fake host's world: sessions names "${id}", a Journey the world does not have or one with no project path`);
-    }
-    sessions.forEach((session, index) => {
-      const where = `sessions.${id}[${index}]`;
-      const summary = SessionSummary.safeParse(session);
-      if (!summary.success) throw fail(where, summary.error.issues[0]);
-      session.entries.forEach((entry, at) => {
-        const parsed = TranscriptEntry.safeParse(entry);
-        if (!parsed.success) throw fail(`${where}.entries[${at}]`, parsed.error.issues[0]);
-      });
-      const problem = contentProblem(JSON.stringify(session));
-      if (problem) throw new Error(`The fake host's world: ${where}: ${problem}`);
-    });
-  }
+  checkSessions(world.sessions ?? {}, (id) => journeyOf(id)?.projectPath !== undefined, fail);
   world.turns.forEach((turn, index) => {
     parseTurn(`turns[${index}] ("${turn.prompt}")`, turn.events);
     turn.extensionErrors?.forEach((failure, at) => {
@@ -323,8 +283,7 @@ export class FakeHost implements SocketServer {
   readonly #connections = new Set<Connection>();
   /** The open sessions, by id: their Journey and their file. */
   readonly #sessions = new Map<string, { readonly journey: string; readonly file: string }>();
-  /** Each Journey's sessions on disk. */
-  readonly #disk = new Map<string, DiskSession[]>();
+  readonly #disk: FakeDisk;
   #newSessions = 0;
   #opens = 0;
   readonly #failures: { readonly failure: ScriptedFailure; answered: boolean; failing: boolean }[];
@@ -339,12 +298,7 @@ export class FakeHost implements SocketServer {
     this.#turns = world.turns.map((turn) => ({ turn, played: false }));
     this.#failures = (world.failures ?? []).map((failure) => ({ failure, answered: false, failing: true }));
     for (const journey of world.heldOpens ?? []) this.#heldOpens.set(journey, "waiting");
-    for (const [journey, sessions] of Object.entries(world.sessions ?? {})) {
-      this.#disk.set(
-        journey,
-        sessions.map((session) => ({ ...session, entries: [...session.entries], earlier: session.earlier ?? 0, listed: true })),
-      );
-    }
+    this.#disk = new FakeDisk(world.sessions);
   }
 
   requestsOf<T extends ClientRequestBody["type"]>(type: T): Extract<ClientRequestBody, { type: T }>[] {
@@ -530,7 +484,7 @@ export class FakeHost implements SocketServer {
       this.#error(connection, id, failure.code, failure.message);
       return;
     }
-    const resumed = request.sessionFile === undefined ? undefined : this.#listedSession(journey.id, request.sessionFile);
+    const resumed = request.sessionFile === undefined ? undefined : this.#disk.listed(journey.id, request.sessionFile);
     if (request.sessionFile !== undefined && !resumed) {
       this.#notTheJourneys(connection, id, `session.open of ${request.sessionFile}`, journey.id);
       return;
@@ -552,7 +506,7 @@ export class FakeHost implements SocketServer {
     }
     const sessionId = resumed ? resumed.id : `session-${++this.#newSessions}`;
     const sessionFile = resumed ? resumed.file : `/Users/test/.pi/agent/sessions/${sessionId}.jsonl`;
-    if (!resumed) this.#diskOf(journey.id).push({ file: sessionFile, id: sessionId, title: "", created: 0, modified: 0, entries: [], earlier: 0, listed: false });
+    if (!resumed) this.#disk.create(journey.id, sessionId, sessionFile);
     this.#sessions.set(sessionId, { journey: journey.id, file: sessionFile });
     const number = ++this.#opens;
     const model = this.#world.models[0];
@@ -588,11 +542,7 @@ export class FakeHost implements SocketServer {
       this.#error(connection, id, failure.code, failure.message);
       return;
     }
-    const sessions = this.#diskOf(journey)
-      .filter((session) => session.listed)
-      .sort((a, b) => b.modified - a.modified)
-      .map(({ file, id: sessionId, title, created, modified }) => ({ file, id: sessionId, title, created, modified }));
-    this.#reply(connection, { id, result: { type: "sessions.list", journey, sessions } });
+    this.#reply(connection, { id, result: { type: "sessions.list", journey, sessions: this.#disk.list(journey) } });
   }
 
   #transcript(connection: Connection, id: string, request: SessionTranscript): void {
@@ -603,7 +553,7 @@ export class FakeHost implements SocketServer {
       this.#error(connection, id, failure.code, failure.message);
       return;
     }
-    const session = this.#listedSession(journey, request.sessionFile);
+    const session = this.#disk.listed(journey, request.sessionFile);
     if (!session) {
       this.#notTheJourneys(connection, id, `session.transcript of ${request.sessionFile}`, journey);
       return;
@@ -623,19 +573,6 @@ export class FakeHost implements SocketServer {
       return undefined;
     }
     return journey.id;
-  }
-
-  #diskOf(journey: string): DiskSession[] {
-    let sessions = this.#disk.get(journey);
-    if (!sessions) {
-      sessions = [];
-      this.#disk.set(journey, sessions);
-    }
-    return sessions;
-  }
-
-  #listedSession(journey: string, file: string): DiskSession | undefined {
-    return this.#diskOf(journey).find((session) => session.listed && session.file === file);
   }
 
   /** A file the UI should only know from the list: refused as the real host refuses it, and recorded. */
@@ -679,7 +616,8 @@ export class FakeHost implements SocketServer {
       return;
     }
     next.played = true;
-    this.#record(request.sessionId, request.text, next.turn.events);
+    const open = this.#sessions.get(request.sessionId);
+    if (open) this.#disk.record(open.journey, open.file, request.text, next.turn.events, this.#clock++);
     this.#reply(connection, { id, result: { type: "session.prompt", sessionId: request.sessionId } });
     for (const failure of next.turn.extensionErrors ?? []) {
       this.#broadcastHostEvent({ type: "session.extension_error", sessionId: request.sessionId, ...failure });
@@ -691,29 +629,6 @@ export class FakeHost implements SocketServer {
       return;
     }
     for (const event of events) send(event);
-  }
-
-  /**
-   * The turn, written to the session's file as Pi writes it: a new session is
-   * listed from its first prompt, titled by it; every prompt makes it the
-   * newest, and its turn can be read back.
-   */
-  #record(sessionId: string, prompt: string, events: readonly SessionEvent[]): void {
-    const open = this.#sessions.get(sessionId);
-    const session = open && this.#onDisk(open.journey, open.file);
-    if (!session) return;
-    const now = this.#clock++;
-    if (!session.listed) {
-      session.listed = true;
-      session.title = prompt.replace(/\s+/g, " ").trim();
-      session.created = now;
-    }
-    session.modified = now;
-    session.entries.push(...entriesOf(prompt, events));
-  }
-
-  #onDisk(journey: string, file: string): DiskSession | undefined {
-    return this.#diskOf(journey).find((session) => session.file === file);
   }
 
   /** A session event, stamped, to every open, authenticated connection, as the real host broadcasts. */
@@ -768,44 +683,4 @@ export class FakeHost implements SocketServer {
     log(`#${connection.side.id} has no script: ${detail}`);
     this.#error(connection, id, "internal_failure", `The fake host has no script for this: ${detail}.`);
   }
-}
-
-/** A played turn as the real host reads it back from the file: the prompt, each answer, each tool call with its result. */
-function entriesOf(prompt: string, events: readonly SessionEvent[]): TranscriptEntry[] {
-  const entries: TranscriptEntry[] = [{ kind: "user", text: prompt }];
-  let thinking = "";
-  for (const event of events) {
-    switch (event.type) {
-      case "thinking_delta":
-        thinking += event.delta;
-        break;
-      case "message_end":
-        if (event.role !== "assistant") break;
-        if (event.text || thinking || event.errorMessage) {
-          entries.push({
-            kind: "assistant",
-            text: event.text,
-            thinking,
-            ...(event.stopReason ? { stopReason: event.stopReason } : {}),
-            ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
-          });
-        }
-        thinking = "";
-        break;
-      case "tool_start":
-        entries.push({ kind: "tool", toolCallId: event.toolCallId, name: event.toolName, args: event.args });
-        break;
-      case "tool_end":
-        for (const entry of entries) {
-          if (entry.kind !== "tool" || entry.toolCallId !== event.toolCallId) continue;
-          entry.result = event.resultText;
-          entry.isError = event.isError;
-          if (event.durationMs !== undefined) entry.durationMs = event.durationMs;
-        }
-        break;
-      default:
-        break;
-    }
-  }
-  return entries;
 }

@@ -123,7 +123,8 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
     `testing/queries.ts`.
   - A world scripts each Journey's sessions on disk with `sessions`
     (Garden's are `gardenSessions` in `worlds.ts`), which the fake host
-    lists, reads and resumes as the real host does; `closedSessions` says
+    lists, reads and resumes as the real host does, its disk kept as Pi
+    keeps one (`testing/fakeDisk.ts`); `closedSessions` says
     which sessions a later open closed. A world scripts the real host's
     failures with `failures` (`hello`, `journeys.list`, or one Journey's
     `session.open`, `sessions.list` or `session.transcript`), answered until the
