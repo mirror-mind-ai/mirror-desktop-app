@@ -2,7 +2,7 @@
 
 # CV1.DS2 — Sessions and Live Control
 
-**Status:** 🟡 Planned
+**Status:** 🟡 In progress
 **Type:** Delivery Story
 **Depends on:** CV1.DS1 (the shell these capabilities live in)
 

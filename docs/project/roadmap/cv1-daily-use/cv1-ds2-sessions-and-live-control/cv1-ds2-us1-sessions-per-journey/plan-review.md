@@ -4,7 +4,7 @@
 
 **Date:** 2026-10-29
 **Reviewed:** the first version of the plan, the story and the test guide, as committed in `3994ac8`.
-**Outcome:** the plan was revised with the defects below; R1–R3 await the Navigator's rulings, and the plan carries the Driver's recommendation for each until ruled.
+**Outcome:** the plan was revised with the nineteen defects below and the Navigator's rulings on R1–R3, each the recommended option; the current version is [plan.md](plan.md), approved on 2026-10-29.
 
 ## How it was reviewed
 
@@ -78,7 +78,9 @@ The Driver then verified the sharpest claims:
 
 ## Navigator rulings
 
-| Decision | Options | Recommendation |
+The Navigator took the Driver's recommendation on every decision.
+
+| Decision | Options | Recommendation, ruled |
 |---|---|---|
 | R1 — where "one open session per Journey" lives (engineer 4, 5; quality-assurance 4; security 9) | (a) in the UI, as planned: a pick closes the open session first, a failed close is toasted and the old session leaks until quit; (b) in the host: `session.open` for a Journey closes that Journey's open session before opening, in one request, and a pick only shows; (c) the host refuses an open while one is open and the UI must close first | **(b)**: the invariant lives where the sessions live; no close-then-open window, no failure toast, no leak; and a pick becomes a pure look, so D14 is kept more strictly than the plan had it: looking at another session closes nothing, the next send does |
 | R2 — the list while a turn runs (quality-assurance 1; experience-designer 3) | (a) the button disabled, the hint in its `title`; the Escape-on-open-list test then has no turn to protect and route step 9 is cut; (b) the list opens, its options are disabled, and a visible line in the list says "Pi is answering. Pick a session when it finishes."; Escape closes it with the default prevented, so the turn goes on | **(b)**: looking is free (D14), the hint is visible rather than a tooltip on a control that takes no focus, and the overlay rule gets a real test and a real route step |
