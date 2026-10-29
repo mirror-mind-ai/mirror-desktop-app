@@ -278,18 +278,22 @@ terminal open in that Journey's project path:
 | 2 | Open the list | "New session" first, then the sessions newest first with title and date, the shown one marked and in view; the same files `pi -r` lists in that project, in the same order |
 | 3 | Pick an older session, then the most recent again, then the most recent once more | Each pick shows its own transcript; the third changes nothing; `mirror conversations` still shows no new conversation |
 | 4 | Quit any terminal Pi on that session, then send a message on the shown session | The answer follows the read transcript; the header shows the model and thinking level from the file; `mirror conversations` shows a new conversation on the Journey (the file's old one had ended); the session file in `~/.pi/agent/sessions/<project>/` grew |
-| 5 | In the terminal run `pi -r` and pick that session | The message sent from the desktop and its answer are in the terminal's transcript; send one line there and quit |
-| 6 | Back in the app, open the list and pick the same session again | The line sent from the terminal is at the end of the transcript |
+| 5 | Quit the app (its quit closes the session), then in the terminal run `pi -r` and pick that session | The message sent from the desktop and its answer are in the terminal's transcript; send one line there and quit |
+| 6 | Relaunch the app and pick the Journey | The session continued in the terminal is the most recent, shown with the terminal's line at its end |
 | 7 | Ask for a long answer; while it streams, open the list | Its options are disabled and the line says Pi is answering; Escape closes the list and the answer goes on; a second Escape, list closed, stops it as in US3 |
 | 8 | With the session open and idle, pick "New session"; send a line | The new-session line first; the send opens a new session and the button names it; `mirror conversations` shows the previous conversation ended and a new one begun |
 | 9 | Pick a Journey whose folder has no sessions | The new-session line, and the button says "New session" |
-| 10 | Pick the `mirror` Journey (760 sessions, the largest file 75 MB) | The most recent session shows within one second; the list opens within one second; a session with more than 200 entries opens at its end with "Earlier history in this session is not shown (n messages)" at its top |
+| 10 | Pick the `mirror` Journey (116 sessions, the most of any Journey) | The most recent session shows within one second; the list opens within one second; a session with more than 200 entries opens at its end with "Earlier history in this session is not shown (n messages)" at its top |
 
 **Pass:** every observation holds. **Fail:** any does not; or picking a
 Journey or a session writes a Mirror conversation or closes one; or a
 session resumed here is not continued by `pi -r`; or Escape on the open
 list stops a turn; or the `mirror` Journey takes more than a second to
 list or show.
+
+The route was corrected during implementation (see As Built): steps 5 and
+6 quit the app before the terminal continues the session, and step 10
+names the Journey with the most sessions.
 
 E2E decision: required. The fake host proves every path in the UI, and
 the host's tests prove the index, the projection and the containment on
@@ -341,3 +345,53 @@ none on a look, and how fast 760 real files index.
 - pending confirmation: `navigator_approval`
 - implementation remains blocked until Navigator approval; R1–R3 in
   [plan-review.md](plan-review.md) are ruled.
+
+## As Built
+
+Where the implementation departed from the plan above, and why. The
+decisions stand; these are the facts that refined them.
+
+- **Slices.** The protocol could not commit green alone (the server's
+  switch is exhaustive over requests), so the protocol, the index and the
+  transcript read landed together (`d51e971`), resume with them. Then the
+  fake host (`ceba910`), the store (`f382cac`) and the header's list
+  (`588c5a0`).
+- **The index's head (D2).** It reads up to 256 KB, stopping at the first
+  user message, not a fixed 64 KB: on the first user's 778 sessions the
+  first user message always ended within 61 KB, after the system prompt
+  Pi records ahead of it, too close to 64 KB to trust. Most files stop
+  within 16 KB. Measured: 760 sessions list in 36–92 ms (Pi's `list()`:
+  2.9 s), none untitled.
+- **The title (D2).** The whole first message, its text blocks joined and
+  its whitespace folded, as Pi's own list shows it, rather than its first
+  line, which for a pasted prompt is often "Hi,".
+- **The folder (D2, D4).** Pi computes it in `getDefaultSessionDir`, which
+  also creates it (a write a look must not make) and is not exported. The
+  host carries the three-line encoding (`sessionFolderOf`), and a test
+  holds it to the folder Pi itself reports.
+- **Containment (D4).** A non-empty file only: Pi rewrites an empty file
+  it is asked to open. A Journey with no folder refuses a file as not its
+  own, not as missing (a test caught the wrong words).
+- **The cap (D3).** The marker is in the text ("… cut here: n more
+  characters are in the session file."), so the protocol has nothing to
+  say about it; it is tested in the host's projection, not in the schemas.
+- **The read's cost (D3).** Measured through the real host on the largest
+  Journey: the newest session read in 13 ms (393 KB over the socket), the
+  largest file in that folder in 38 ms.
+- **The list read again (D7).** After a turn settles, so a session the
+  turn started is listed and named (Pi writes a new session's file only
+  with its first message, so a re-read after the open would find nothing);
+  and when the list opens, so it shows what terminal Pi wrote since.
+- **The route (Validation Route).** No Journey has the 760-session folder
+  as its project path (it is `~/dev/workspace/mirror`, where terminal
+  Mirror runs); the Journey with the most sessions is `mirror`, with 116.
+  And a session the desktop holds open must not be continued in the
+  terminal at the same time: Pi has no lock, and the two would write
+  branches into one file. Steps 5 and 6 quit the app first.
+- **Debt found and paid in the gate.** Two defects older than this story
+  made the gate dishonest: the unhandled `ConnectionLostError` vitest
+  reported on every run since CV1.DS1.US3 came from the fake host's
+  goAway test, which discarded a rejecting open (`cc07945`); and
+  `Transcript.test.tsx` failed about one full run in ten, a released
+  Markdown turn rendering in up to two seconds under findBy's one-second
+  default (`94df11c`). Both were test-only changes, each its own commit.

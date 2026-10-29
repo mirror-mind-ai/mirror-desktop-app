@@ -101,8 +101,14 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
   characters in code. A bump of `react-markdown`, `remark-gfm` or
   `rehype-highlight` is reviewed as a security change; the tests over the
   `unsafe-answer` fixture are its net.
-- **Selecting a Journey writes nothing** (D14). The first send opens its
-  session; navigation never starts Pi or binds a Mirror conversation.
+- **Looking writes nothing** (D14). Picking a Journey shows its most
+  recent session, read from its file; picking a session or "New session"
+  is a look too. The first send opens the session shown, resuming its file
+  or starting a new one; navigation never starts Pi or binds a Mirror
+  conversation. The host keeps one open session per Journey: the open
+  closes the one before (`packages/host/src/sessionPolicy.ts`), and the UI
+  never asks for a close. A file the UI names is read or resumed only when
+  it is one of the Journey's sessions (`sessionIndex.ts`, by realpath).
 - **TDD for behavior.** A feature or fix starts with a failing test; error
   paths carry the same burden as happy paths; `retry: 0`, a flaky test is
   fixed, never retried.
@@ -115,8 +121,12 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
     step. Invented Journeys and turns for the shell are in
     `testing/worlds.ts`, and the shared screen queries in
     `testing/queries.ts`.
-  - A world scripts the real host's failures with `failures` (`hello`,
-    `journeys.list`, or one Journey's `session.open`), answered until the
+  - A world scripts each Journey's sessions on disk with `sessions`
+    (Garden's are `gardenSessions` in `worlds.ts`), which the fake host
+    lists, reads and resumes as the real host does; `closedSessions` says
+    which sessions a later open closed. A world scripts the real host's
+    failures with `failures` (`hello`, `journeys.list`, or one Journey's
+    `session.open`, `sessions.list` or `session.transcript`), answered until the
     test calls `stopFailing()`; `heldOpens` holds a `session.open` until
     `heldOpen(journey).release()`; a scripted turn's `extensionErrors` are
     reported after its prompt's answer and before its events, as an
@@ -143,7 +153,8 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
     class and a light system (`testing/appearance.ts`).
   - Fixtures and worlds are invented and inert: no real paths (only
     `/Users/test/`), no real session or tool text, nothing shaped like a
-    secret. The loader refuses them. UI tests never enable script evaluation.
+    secret. The loader refuses them in a turn, the fake host in a world's
+    sessions. UI tests never enable script evaluation.
   - Harness code lives only under `apps/desktop/src/testing/`, never in a
     staged package. App code never imports it, and a test enforces that.
 - **TypeScript strict, no `any`;** casts only at SDK boundaries with a reason.

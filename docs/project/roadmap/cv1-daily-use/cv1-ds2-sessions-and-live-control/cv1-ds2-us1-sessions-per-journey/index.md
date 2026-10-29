@@ -39,8 +39,9 @@ line saying how much came before, and no single entry can flood the
 screen; a Journey whose sessions cannot be read, or a session that
 cannot, says so and still sends. The host shows or resumes only files
 inside the Journey's own session folder, and never the same file twice.
-The `mirror` Journey's 760 sessions list and show within a second,
-because the host reads the head of each file rather than the whole.
+A Journey with hundreds of sessions lists and shows them within a
+second, because the host reads the head of each file rather than the
+whole: 760 sessions list in under a tenth of a second.
 
 ## Acceptance Behavior
 
