@@ -134,5 +134,13 @@ Automated, 2026-10-29, on `588c5a0` with Pi 1.4.0 and Mirror 0.38.0:
 - The index on the 760-session folder no Journey owns: 36–92 ms, none
   untitled, against 2,904 ms and 366 MB for Pi's `list()`.
 
-Pending: the real turn on a Journey the Navigator names, and the
-Navigator's route.
+The real turn, 2026-10-29, on Automation, the Journey the Navigator
+named: `npm run turn` opened a new session and answered "pong"; Pi wrote
+`2026-10-29T19-06-31-033Z_01a1890e-….jsonl` with the prompt and the
+answer, and Mirror logged conversation `83af4af9` on the Journey.
+
+Navigator, 2026-10-29, in the window on Automation, steps 0 to 10:
+validated ("It's validated. And it's very nice."). One correction to the
+route as given in the session, not to the product: the Navigator's shell
+aliases `ls` to a tool where `-t` takes a value, so the check of the
+session folder is `/bin/ls -t`.
