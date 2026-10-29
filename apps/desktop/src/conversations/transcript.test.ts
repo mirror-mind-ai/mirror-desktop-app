@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { extensionNotice, providerErrorNotice, reduceRows, retryNotice, type Row } from "./transcript.ts";
+import { extensionNotice, providerErrorNotice, reduceRows, retryNotice, type Row, rowsOf } from "./transcript.ts";
 
 const play = (...events: Parameters<typeof reduceRows>[1][]): Row[] => events.reduce(reduceRows, [] as Row[]);
 
@@ -97,5 +97,51 @@ describe("the notices", () => {
       tone: "notice",
       text: "mirror on agent_end: the database is locked",
     });
+  });
+});
+
+describe("rowsOf", () => {
+  it("draws a session read from its file as its turns were drawn live, every row done", () => {
+    expect(
+      rowsOf(
+        [
+          { kind: "user", text: "Plant" },
+          { kind: "assistant", text: "Planting.", thinking: "Where?", stopReason: "toolUse" },
+          { kind: "tool", toolCallId: "c1", name: "bash", args: { command: "ls" }, result: "beds", isError: false, durationMs: 9 },
+          { kind: "notice", name: "garden-note", text: "Watered." },
+        ],
+        0,
+      ),
+    ).toEqual([
+      { kind: "user", text: "Plant" },
+      { kind: "assistant", text: "Planting.", thinking: "Where?", done: true, stopReason: "toolUse" },
+      { kind: "tool", toolCallId: "c1", name: "bash", args: { command: "ls" }, done: true, isError: false, durationMs: 9, result: "beds" },
+      { kind: "notice", name: "garden-note", tone: "notice", text: "Watered." },
+    ]);
+  });
+
+  it("opens with how many messages the host left out, when it left some", () => {
+    expect(rowsOf([{ kind: "user", text: "Plant" }], 12)).toEqual([
+      { kind: "earlier", messages: 12 },
+      { kind: "user", text: "Plant" },
+    ]);
+  });
+
+  it("says a provider's failure as it was said live, and a stop not at all", () => {
+    expect(
+      rowsOf(
+        [
+          { kind: "assistant", text: "", thinking: "", stopReason: "error", errorMessage: "Overloaded" },
+          { kind: "assistant", text: "Half an ans", thinking: "", stopReason: "aborted", errorMessage: "Request was aborted" },
+        ],
+        0,
+      ),
+    ).toEqual([providerErrorNotice("Overloaded"), { kind: "assistant", text: "Half an ans", thinking: "", done: true, stopReason: "aborted" }]);
+  });
+
+  it("draws a tool call whose result never came as one that did not succeed", () => {
+    expect(rowsOf([{ kind: "tool", toolCallId: "c1", name: "bash", args: { command: "sleep 99" } }], 0)).toEqual([
+      { kind: "tool", toolCallId: "c1", name: "bash", args: { command: "sleep 99" }, done: true, isError: true },
+    ]);
   });
 });

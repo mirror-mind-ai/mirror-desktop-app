@@ -3,7 +3,7 @@
 // text and thinking, a tool call's arguments and result, a named notice), and
 // how each is drawn is the transcript's (src/transcript/, CV1.DS1.US2).
 
-import type { SessionEvent } from "@mirror-desktop/protocol";
+import type { SessionEvent, TranscriptEntry } from "@mirror-desktop/protocol";
 
 /** How loud a notice is: the notice color, or the alarm's. */
 export type NoticeTone = "notice" | "danger";
@@ -28,7 +28,9 @@ export type Row =
     }
   | NoticeRow
   /** Something that failed to load when the session opened: informational, so it is shown muted, never as an alarm. */
-  | { kind: "diagnostic"; text: string };
+  | { kind: "diagnostic"; text: string }
+  /** A session read from its file starts after this many messages, which the host's bound left out. */
+  | { kind: "earlier"; messages: number };
 
 type AssistantRow = Extract<Row, { kind: "assistant" }>;
 
@@ -77,6 +79,46 @@ export function reduceRows(rows: Row[], event: SessionEvent): Row[] {
   }
 }
 
+/**
+ * A session read from its file, as rows: the rows its turns left when they
+ * streamed, every one of them done, after a row saying how many messages the
+ * host's bound left out. An answer's failure is said as it was live, except
+ * a stop, which is the person's own act; a tool call whose result never came
+ * did not succeed.
+ */
+export function rowsOf(entries: readonly TranscriptEntry[], earlier: number): Row[] {
+  const rows: Row[] = earlier > 0 ? [{ kind: "earlier", messages: earlier }] : [];
+  for (const entry of entries) {
+    switch (entry.kind) {
+      case "user":
+        rows.push({ kind: "user", text: entry.text });
+        break;
+      case "assistant":
+        if (entry.text || entry.thinking) {
+          rows.push({ kind: "assistant", text: entry.text, thinking: entry.thinking, done: true, ...(entry.stopReason ? { stopReason: entry.stopReason } : {}) });
+        }
+        if (entry.errorMessage && entry.stopReason !== "aborted") rows.push(providerErrorNotice(entry.errorMessage));
+        break;
+      case "tool":
+        rows.push({
+          kind: "tool",
+          toolCallId: entry.toolCallId,
+          name: entry.name,
+          args: entry.args,
+          done: true,
+          isError: entry.result === undefined || entry.isError === true,
+          ...(entry.durationMs !== undefined ? { durationMs: entry.durationMs } : {}),
+          ...(entry.result !== undefined ? { result: entry.result } : {}),
+        });
+        break;
+      case "notice":
+        rows.push({ kind: "notice", name: entry.name, tone: "notice", text: entry.text });
+        break;
+    }
+  }
+  return rows;
+}
+
 /** A provider asked for a retry: which attempt of how many, its message, and the wait. */
 export function retryNotice(retry: { attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }): NoticeRow {
   return {
@@ -92,12 +134,12 @@ export function providerErrorNotice(message: string): NoticeRow {
   return { kind: "notice", name: "Provider error", tone: "danger", text: message };
 }
 
-/** An extension failed inside Pi; the turn goes on. */
 /** The connection to the host ended while this conversation was answering: the answer stops where it was. */
 export function connectionLostNotice(): NoticeRow {
   return { kind: "notice", name: "Connection lost", tone: "notice", text: "The connection to the host was lost while Pi was answering." };
 }
 
+/** An extension failed inside Pi; the turn goes on. */
 export function extensionNotice(failure: { extension: string; event: string; message: string }): NoticeRow {
   return { kind: "notice", name: "Extension failed", tone: "notice", text: `${failure.extension} on ${failure.event}: ${failure.message}` };
 }

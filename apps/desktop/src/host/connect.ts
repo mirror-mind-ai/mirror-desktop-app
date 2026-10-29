@@ -47,7 +47,7 @@ export async function connectToHost(
     return;
   }
   lease.client = client;
-  client.onEvent = applyHostEvent;
+  client.onEvent = (event) => applyHostEvent(event, client);
   hostConnected(client, opened.host);
 
   let canUseModels: boolean;

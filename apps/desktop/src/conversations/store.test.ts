@@ -1,17 +1,23 @@
-import type { ClientRequestBody, HostEvent, HostResultBody, SessionEvent } from "@mirror-desktop/protocol";
-import { beforeEach, describe, expect, it } from "vitest";
+import type { ClientRequestBody, HostEvent, HostResultBody, SessionEvent, SessionSummary, TranscriptEntry } from "@mirror-desktop/protocol";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ConnectionLostError, type HostConnection, HostRequestError } from "../host/client.ts";
 import { resetAllStores } from "../stores/registry.ts";
 import {
   abort,
   applyHostEvent,
+  chooseSession,
   connectionLost,
   type Conversation,
   isWorking,
+  retryRead,
+  retrySessions,
   selectJourney,
   send,
   setDraft,
+  showJourney,
+  shownSummary,
+  startNewSession,
   useConversations,
 } from "./store.ts";
 
@@ -92,7 +98,7 @@ describe("selecting a Journey", () => {
   it("makes it current with an empty conversation, and asks the host for nothing", () => {
     selectJourney("garden");
     expect(useConversations.getState().current).toBe("garden");
-    expect(entry("garden")).toEqual({ status: "idle", draft: "", rows: [], running: false });
+    expect(entry("garden")).toEqual({ status: "idle", draft: "", rows: [], running: false, shown: { kind: "new" } });
   });
 
   it("keeps each Journey's draft and conversation when switching between them", () => {
@@ -200,6 +206,7 @@ describe("sending", () => {
       rows: [],
       running: false,
       failure: "The project path does not exist.",
+      shown: { kind: "new" },
     });
     expect(isWorking(entry("garden"))).toBe(false);
 
@@ -365,7 +372,7 @@ describe("the connection lost", () => {
     ]);
     expect(entry("beds")).toMatchObject({ status: "open", running: false });
     expect(entry("beds")?.rows.some((row) => row.kind === "notice")).toBe(false);
-    expect(entry("attic")).toEqual({ status: "idle", draft: "Later", rows: [], running: false });
+    expect(entry("attic")).toEqual({ status: "idle", draft: "Later", rows: [], running: false, shown: { kind: "new" } });
   });
 });
 
@@ -380,5 +387,229 @@ describe("isolation", () => {
     open.resolve(opened("session-1", "garden"));
     await sending;
     expect(useConversations.getState()).toEqual({ current: null, entries: {} });
+  });
+});
+
+describe("a Journey's sessions", () => {
+  const folder = "/Users/test/.pi/agent/sessions/--Users-test-garden--";
+  const garden = { id: "garden", projectPath: "/Users/test/garden" };
+  const summary = (id: string, title: string, modified: number): SessionSummary => ({
+    file: `${folder}/${id}.jsonl`,
+    id,
+    title,
+    created: modified,
+    modified,
+  });
+  const tomatoes = summary("tomatoes", "Plant the tomatoes", 2);
+  const roses = summary("roses", "Prune the roses", 1);
+  const said = (text: string): TranscriptEntry[] => [
+    { kind: "user", text },
+    { kind: "assistant", text: `Done: ${text}`, thinking: "", stopReason: "stop" },
+  ];
+  const readRows = (text: string) => [
+    { kind: "user", text },
+    { kind: "assistant", text: `Done: ${text}`, thinking: "", done: true, stopReason: "stop" },
+  ];
+
+  /** A host with Garden's sessions on disk; reads wait on `hold` when it returns a promise for that file. */
+  function diskHost(options: { sessions?: SessionSummary[]; hold?: (file: string) => Promise<void> | undefined; failList?: () => boolean; failRead?: () => boolean } = {}) {
+    let opens = 0;
+    return stubHost(async (body) => {
+      switch (body.type) {
+        case "sessions.list":
+          if (options.failList?.()) throw new HostRequestError("sessions_unreadable", "The session folder could not be read: permission denied.");
+          return { type: "sessions.list", journey: body.journey, sessions: options.sessions ?? [tomatoes, roses] };
+        case "session.transcript": {
+          await options.hold?.(body.sessionFile);
+          if (options.failRead?.()) throw new HostRequestError("sessions_unreadable", "This session could not be read: its file is not a Pi session Pi can load.");
+          const listed = (options.sessions ?? [tomatoes, roses]).find((session) => session.file === body.sessionFile);
+          return { type: "session.transcript", sessionFile: body.sessionFile, entries: said(listed?.title ?? "?"), earlier: 0 };
+        }
+        case "session.open":
+          opens += 1;
+          return opened(body.sessionFile ? `resumed-${opens}` : `session-${opens}`, "garden", body.sessionFile ? { sessionFile: body.sessionFile, diagnostics: ["extension x failed"] } : {});
+        case "session.prompt":
+          return { type: "session.prompt", sessionId: body.sessionId };
+        default:
+          throw new Error(`the stub host does not answer ${body.type}`);
+      }
+    });
+  }
+  const types = (requests: ClientRequestBody[]) => requests.map((request) => request.type);
+
+  it("shows the most recent session on the first pick, read from its file, and opens nothing", async () => {
+    const { client, requests } = diskHost();
+    await showJourney(client, garden);
+
+    expect(requests).toEqual([
+      { type: "sessions.list", journey: "garden" },
+      { type: "session.transcript", journey: "garden", sessionFile: tomatoes.file },
+    ]);
+    expect(entry("garden")).toMatchObject({ status: "idle", shown: { kind: "file", file: tomatoes.file }, rows: readRows("Plant the tomatoes") });
+    expect(entry("garden")?.reading).toBeUndefined();
+    expect(shownSummary(entry("garden"))).toEqual(tomatoes);
+  });
+
+  it("is reading from the pick until the session is read", async () => {
+    let release: () => void = () => {};
+    const { client, requests } = diskHost({ hold: () => new Promise<void>((resolve) => (release = resolve)) });
+    const showing = showJourney(client, garden);
+    expect(entry("garden")?.reading).toEqual({ status: "reading" });
+    // Listed, and now reading the most recent session's file.
+    await vi.waitFor(() => expect(types(requests)).toEqual(["sessions.list", "session.transcript"]));
+    expect(entry("garden")?.reading).toEqual({ status: "reading" });
+    release();
+    await showing;
+    expect(entry("garden")?.reading).toBeUndefined();
+  });
+
+  it("shows a new session when the Journey has none, and lists nothing for a Journey with no project path", async () => {
+    const { client, requests } = diskHost({ sessions: [] });
+    await showJourney(client, garden);
+    expect(entry("garden")).toMatchObject({ shown: { kind: "new" }, rows: [], sessions: { status: "loaded", sessions: [] } });
+    expect(entry("garden")?.reading).toBeUndefined();
+
+    await showJourney(client, { id: "orchard" });
+    expect(types(requests)).toEqual(["sessions.list"]);
+    expect(useConversations.getState().current).toBe("orchard");
+  });
+
+  it("lists once: a Journey shown again is as it was left", async () => {
+    const { client, requests } = diskHost();
+    await showJourney(client, garden);
+    setDraft("garden", "half a thought");
+    await showJourney(client, { id: "beds", projectPath: "/Users/test/beds" });
+    await showJourney(client, garden);
+
+    expect(types(requests)).toEqual(["sessions.list", "session.transcript", "sessions.list", "session.transcript"]);
+    expect(entry("garden")).toMatchObject({ draft: "half a thought", rows: readRows("Plant the tomatoes") });
+  });
+
+  it("keeps a list that failed with its words, and on Try again lists and shows the most recent", async () => {
+    let failing = true;
+    const { client } = diskHost({ failList: () => failing });
+    await showJourney(client, garden);
+    expect(entry("garden")?.sessions).toEqual({ status: "failed", sessions: [], failure: "The session folder could not be read: permission denied." });
+    expect(entry("garden")).toMatchObject({ shown: { kind: "new" }, rows: [] });
+    expect(entry("garden")?.reading).toBeUndefined();
+
+    failing = false;
+    await retrySessions(client, "garden");
+    expect(entry("garden")).toMatchObject({ shown: { kind: "file", file: tomatoes.file }, rows: readRows("Plant the tomatoes"), sessions: { status: "loaded" } });
+  });
+
+  it("does not replace a conversation begun while the list was failing", async () => {
+    let failing = true;
+    const { client } = diskHost({ failList: () => failing });
+    await showJourney(client, garden);
+    await sendInto(client, "garden", "Hello");
+
+    failing = false;
+    await retrySessions(client, "garden");
+    expect(entry("garden")).toMatchObject({ shown: { kind: "file", file: "/Users/test/.pi/agent/sessions/session-1.jsonl" }, rows: [{ kind: "user", text: "Hello" }] });
+  });
+
+  it("keeps a read that failed with its words, and reads again on Try again", async () => {
+    let failing = true;
+    const { client } = diskHost({ failRead: () => failing });
+    await showJourney(client, garden);
+    expect(entry("garden")?.reading).toEqual({ status: "failed", failure: "This session could not be read: its file is not a Pi session Pi can load." });
+
+    failing = false;
+    await retryRead(client, "garden");
+    expect(entry("garden")?.reading).toBeUndefined();
+    expect(entry("garden")?.rows).toEqual(readRows("Plant the tomatoes"));
+  });
+
+  it("drops a read that lands after a later pick", async () => {
+    const waits = new Map<string, () => void>();
+    const { client } = diskHost({ hold: (file) => (file === roses.file ? new Promise<void>((resolve) => waits.set(file, resolve)) : undefined) });
+    await showJourney(client, garden);
+
+    const late = chooseSession(client, "garden", roses.file);
+    startNewSession("garden");
+    waits.get(roses.file)?.();
+    await late;
+    expect(entry("garden")).toMatchObject({ shown: { kind: "new" }, rows: [] });
+    expect(entry("garden")?.reading).toBeUndefined();
+  });
+
+  it("picks another session as a look, and the shown one, or any while a turn runs, as nothing", async () => {
+    const { client, requests } = diskHost();
+    await showJourney(client, garden);
+    await chooseSession(client, "garden", roses.file);
+    expect(entry("garden")).toMatchObject({ shown: { kind: "file", file: roses.file }, rows: readRows("Prune the roses") });
+
+    await chooseSession(client, "garden", roses.file);
+    await sendInto(client, "garden", "Hello");
+    await chooseSession(client, "garden", tomatoes.file);
+    startNewSession("garden");
+    expect(entry("garden")?.shown).toEqual({ kind: "file", file: roses.file });
+    expect(types(requests).filter((type) => type === "session.transcript")).toHaveLength(2);
+    expect(types(requests)).not.toContain("session.close");
+  });
+
+  it("resumes the shown session's file on the first send, the message and what failed to load after what was read", async () => {
+    const { client, requests } = diskHost();
+    await showJourney(client, garden);
+    await sendInto(client, "garden", "Hello");
+
+    expect(requests.find((request) => request.type === "session.open")).toEqual({ type: "session.open", journey: "garden", sessionFile: tomatoes.file });
+    expect(entry("garden")).toMatchObject({
+      status: "open",
+      session: { id: "resumed-1", file: tomatoes.file },
+      shown: { kind: "file", file: tomatoes.file },
+      rows: [...readRows("Plant the tomatoes"), { kind: "diagnostic", text: "extension x failed" }, { kind: "user", text: "Hello" }],
+    });
+  });
+
+  it("starts a new session on the first send after New session, and shows it from then on", async () => {
+    const { client, requests } = diskHost();
+    await showJourney(client, garden);
+    startNewSession("garden");
+    expect(entry("garden")).toMatchObject({ shown: { kind: "new" }, rows: [] });
+
+    await sendInto(client, "garden", "Hello");
+    expect(requests.find((request) => request.type === "session.open")).toEqual({ type: "session.open", journey: "garden" });
+    expect(entry("garden")?.shown).toEqual({ kind: "file", file: "/Users/test/.pi/agent/sessions/session-1.jsonl" });
+  });
+
+  it("opens the shown session when it is not the open one, and prompts the open one when it is", async () => {
+    const { client, requests } = diskHost();
+    await showJourney(client, garden);
+    await sendInto(client, "garden", "Hello");
+    applyHostEvent(event("resumed-1", { type: "agent_settled", aborted: false }));
+    await sendInto(client, "garden", "Again");
+    expect(types(requests).filter((type) => type === "session.open")).toHaveLength(1);
+
+    applyHostEvent(event("resumed-1", { type: "agent_settled", aborted: false }));
+    await chooseSession(client, "garden", roses.file);
+    await sendInto(client, "garden", "Elsewhere");
+    expect(requests.filter((request) => request.type === "session.open").at(-1)).toEqual({ type: "session.open", journey: "garden", sessionFile: roses.file });
+    expect(entry("garden")?.session).toMatchObject({ id: "resumed-2", file: roses.file });
+  });
+
+  it("resumes a session whose file could not be read: what failed to read it may not stop Pi", async () => {
+    const { client, requests } = diskHost({ failRead: () => true });
+    await showJourney(client, garden);
+    await sendInto(client, "garden", "Hello");
+    expect(requests.find((request) => request.type === "session.open")).toEqual({ type: "session.open", journey: "garden", sessionFile: tomatoes.file });
+  });
+
+  it("lists again when a turn settles, given the connection, so a session it started is named", async () => {
+    const { client, requests } = diskHost({ sessions: [] });
+    await showJourney(client, garden);
+    await sendInto(client, "garden", "Hello");
+    applyHostEvent(event("session-1", { type: "agent_settled", aborted: false }), client);
+    await vi.waitFor(() => expect(types(requests).filter((type) => type === "sessions.list")).toHaveLength(2));
+  });
+
+  it("leaves the rows of a session not shown alone, and still settles its turn", async () => {
+    const { client } = openingHost();
+    await sendInto(client, "garden", "Hello");
+    useConversations.setState((state) => ({ entries: { ...state.entries, garden: { ...state.entries.garden!, shown: { kind: "new" }, rows: [] } } }));
+    applyHostEvent(event("session-1", { type: "text_delta", delta: "late" }));
+    applyHostEvent(event("session-1", { type: "agent_settled", aborted: false }));
+    expect(entry("garden")).toMatchObject({ rows: [], running: false });
   });
 });

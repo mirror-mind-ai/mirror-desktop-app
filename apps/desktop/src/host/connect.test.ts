@@ -8,6 +8,8 @@ import { ConnectionLostError, type HostConnection, HostRequestError } from "./cl
 import { type ConnectionLease, connectToHost } from "./connect.ts";
 import { signedIn, tryHostAgain, useHost } from "./store.ts";
 
+const SESSION_FILE = "/Users/test/.pi/agent/sessions/session-1.jsonl";
+
 const identity: HostIdentity = { instanceId: "host-1", protocolVersion: PROTOCOL_VERSION, node: "v24.0.0", pi: "0.0.0", mirror: "0.0.0" };
 
 /** A connection answering models.available and journeys.list as told, recording what it was asked and whether it was closed. */
@@ -70,7 +72,7 @@ describe("connecting to the host", () => {
     await connectToHost(async () => ({ client, host: identity }), lease());
     useConversations.setState({
       current: "garden",
-      entries: { garden: { status: "open", draft: "", rows: [], running: true, session: { id: "session-1", cwd: "/Users/test/garden", thinkingLevel: "medium" } } },
+      entries: { garden: { status: "open", draft: "", rows: [], running: true, session: { id: "session-1", file: SESSION_FILE, cwd: "/Users/test/garden", thinkingLevel: "medium" }, shown: { kind: "file", file: SESSION_FILE } } },
     });
     const settled: HostEvent = { type: "session.event", sessionId: "session-1", at: 0, event: { type: "agent_settled", aborted: false } };
     client.onEvent(settled);
@@ -136,7 +138,7 @@ describe("connecting to the host", () => {
   it("reports a connection lost after the host was ready, and settles the conversations", async () => {
     const { client } = healthy();
     await connectToHost(async () => ({ client, host: identity }), lease());
-    useConversations.setState({ entries: { garden: { status: "open", draft: "", rows: [], running: true, session: { id: "session-1", cwd: "/Users/test/garden", thinkingLevel: "medium" } } } });
+    useConversations.setState({ entries: { garden: { status: "open", draft: "", rows: [], running: true, session: { id: "session-1", file: SESSION_FILE, cwd: "/Users/test/garden", thinkingLevel: "medium" }, shown: { kind: "file", file: SESSION_FILE } } } });
 
     client.onClose(new ConnectionLostError(false, 1006, ""));
     expect(useHost.getState()).toMatchObject({ status: "failed", client: null, failure: "The connection to the host was lost.", lostAfterReady: true });
