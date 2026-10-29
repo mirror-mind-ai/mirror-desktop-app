@@ -18,7 +18,7 @@
 // on screen. A read can land late: each one carries a token, and only the
 // latest look of its Journey may write what it read.
 
-import type { HostEvent, HostResultBody, SessionSummary } from "@mirror-desktop/protocol";
+import type { HostEvent, HostResultBody, Journey, SessionSummary } from "@mirror-desktop/protocol";
 import { create } from "zustand";
 
 import { failureOf, type HostConnection } from "../host/client.ts";
@@ -133,7 +133,7 @@ export function selectJourney(journeyId: string): void {
  * has nowhere for a session to run, so nothing to list. Shown again, a
  * Journey is as it was left: its draft, its transcript, its running turn.
  */
-export async function showJourney(client: HostConnection, journey: { readonly id: string; readonly projectPath?: string }): Promise<void> {
+export async function showJourney(client: HostConnection, journey: Pick<Journey, "id" | "projectPath">): Promise<void> {
   selectJourney(journey.id);
   if (!journey.projectPath || entryOf(journey.id).sessions) return;
   await listAndShowNewest(client, journey.id);

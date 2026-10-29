@@ -1,7 +1,7 @@
 import { Info, KeyRound } from "lucide-react";
 import { type ReactNode, useId, useMemo, useState } from "react";
 
-import { isWorking, selectJourney, useConversations } from "../conversations/store.ts";
+import { isWorking, selectJourney, showJourney, useConversations } from "../conversations/store.ts";
 import { useHost } from "../host/store.ts";
 import { useJourneys } from "../journeys/store.ts";
 import { type JourneyNode, journeyTree } from "../journeys/tree.ts";
@@ -56,6 +56,7 @@ function JourneyItem({ node }: { node: JourneyNode }) {
   const { journey, level, children } = node;
   // One subscription per row, to its own slice: a background stream re-renders this row only.
   const isCurrent = useConversations((state) => state.current === journey.id);
+  const client = useHost((state) => state.client);
   const working = useConversations((state) => isWorking(state.entries[journey.id]));
   const id = useId();
   const noPathId = `${id}-no-path`;
@@ -70,7 +71,8 @@ function JourneyItem({ node }: { node: JourneyNode }) {
         aria-current={isCurrent ? "true" : undefined}
         aria-busy={working ? "true" : undefined}
         aria-describedby={described || undefined}
-        onClick={() => selectJourney(journey.id)}
+        // Shown, the first time with its most recent session read: a look, which opens nothing.
+        onClick={() => (client ? void showJourney(client, journey) : selectJourney(journey.id))}
         className={`flex w-full flex-col rounded-control py-1.5 pr-2 text-left text-ui outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus ${
           isCurrent ? "bg-selection font-bold" : ""
         }`}

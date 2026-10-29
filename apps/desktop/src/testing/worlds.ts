@@ -7,6 +7,8 @@
 
 import type { AvailableModel, Journey, SessionEvent } from "@mirror-desktop/protocol";
 
+import type { ScriptedSession } from "./fakeHost.ts";
+
 export const model: AvailableModel = { provider: "anthropic", id: "claude-test", name: "Claude Test", reasoning: true };
 
 export const garden: Journey = {
@@ -72,3 +74,35 @@ export function briefAnswer(prompt: string, text: string): SessionEvent[] {
     { type: "agent_settled", aborted: false },
   ];
 }
+
+/** Where Pi keeps Garden's sessions. */
+const gardenFolder = "/Users/test/.pi/agent/sessions/--Users-test-garden--";
+
+/** Garden's two sessions on disk, the most recent first: one with a tool call, one long enough that its start was left out. */
+export const gardenSessions: readonly ScriptedSession[] = [
+  {
+    file: `${gardenFolder}/2025-10-29T09-00-00-000Z_garden-tomatoes.jsonl`,
+    id: "garden-tomatoes",
+    title: "Plant the tomatoes",
+    created: Date.UTC(2025, 9, 29, 9),
+    modified: Date.UTC(2025, 9, 29, 12),
+    entries: [
+      { kind: "user", text: "Plant the tomatoes" },
+      { kind: "assistant", text: "Looking at the beds.", thinking: "", stopReason: "toolUse" },
+      { kind: "tool", toolCallId: "call-beds", name: "bash", args: { command: "ls beds" }, result: "north\nsouth", isError: false },
+      { kind: "assistant", text: "Planted in the north bed.", thinking: "", stopReason: "stop" },
+    ],
+  },
+  {
+    file: `${gardenFolder}/2025-10-20T09-00-00-000Z_garden-roses.jsonl`,
+    id: "garden-roses",
+    title: "Prune the roses",
+    created: Date.UTC(2025, 9, 20, 9),
+    modified: Date.UTC(2025, 9, 20, 12),
+    entries: [
+      { kind: "user", text: "And the climbing one?" },
+      { kind: "assistant", text: "Cut it back by a third.", thinking: "", stopReason: "stop" },
+    ],
+    earlier: 14,
+  },
+];
