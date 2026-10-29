@@ -21,7 +21,13 @@ async function converse(prompt: string, events: SessionEvent[], options: { held?
 }
 
 const settled = (host: FakeHost) => waitFor(() => expect(host.heldTurn().remaining).toBe(0));
-const idle = () => screen.findByRole("button", { name: "Garden", busy: false });
+/**
+ * The turn has settled: Garden is no longer busy. Waited for longer than
+ * findBy's default second, because a released turn renders whole at once:
+ * the markdown-answer fixture is re-parsed and highlighted at every delta,
+ * which took up to two seconds in a full parallel run of the suite.
+ */
+const idle = () => screen.findByRole("button", { name: "Garden", busy: false }, { timeout: 5_000 });
 
 const isTool = (type: "tool_start" | "tool_end", id: string) => (event: SessionEvent) =>
   event.type === type && event.toolCallId === id;
