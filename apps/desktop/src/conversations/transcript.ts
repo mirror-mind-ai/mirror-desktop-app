@@ -2,6 +2,11 @@
 // screen renders. Data only: the rows keep what a turn produced (an answer's
 // text and thinking, a tool call's arguments and result, a named notice), and
 // how each is drawn is the transcript's (src/transcript/, CV1.DS1.US2).
+//
+// The person's messages are rows too: a message Pi delivered into a running
+// turn is drawn from Pi's echo, where Pi took it (CV1.DS2.US2). The echo of
+// the prompt the store sent itself is not folded here: the store drew that
+// message at once, and swallows its echo.
 
 import type { SessionEvent, TranscriptEntry } from "@mirror-desktop/protocol";
 
@@ -48,14 +53,19 @@ export function reduceRows(rows: Row[], event: SessionEvent): Row[] {
         ? withLast(rows, { ...open, thinking: open.thinking + event.delta })
         : [...rows, { kind: "assistant", text: "", thinking: event.delta, done: false }];
     case "message_end": {
+      if (event.role === "user") return [...rows, { kind: "user", text: event.text }];
+      // Mirror's context (a custom message) and a tool's result (on its tool row) are not drawn.
       if (event.role !== "assistant") return rows;
+      if (event.stopReason === "aborted") {
+        // A stop is the person's own act, not a provider's failure, though Pi
+        // ends the message with "Request was aborted": the answer is marked
+        // stopped, and a stop before any of it streamed is still seen.
+        return open ? withLast(rows, { ...open, done: true, stopReason: "aborted" }) : [...rows, stoppedAnswer()];
+      }
       const closed = open
         ? withLast(rows, { ...open, done: true, ...(event.stopReason ? { stopReason: event.stopReason } : {}) })
         : rows;
-      // Pi ends an aborted message with an error message too ("Request was
-      // aborted"). A stop is the person's own act, not a provider's failure,
-      // and what it leaves in the transcript is CV1.DS2's.
-      if (!event.errorMessage || event.stopReason === "aborted") return closed;
+      if (!event.errorMessage) return closed;
       return [...closed, providerErrorNotice(event.errorMessage)];
     }
     case "tool_start":
@@ -96,6 +106,8 @@ export function rowsOf(entries: readonly TranscriptEntry[], earlier: number): Ro
       case "assistant":
         if (entry.text || entry.thinking) {
           rows.push({ kind: "assistant", text: entry.text, thinking: entry.thinking, done: true, ...(entry.stopReason ? { stopReason: entry.stopReason } : {}) });
+        } else if (entry.stopReason === "aborted") {
+          rows.push(stoppedAnswer());
         }
         if (entry.errorMessage && entry.stopReason !== "aborted") rows.push(providerErrorNotice(entry.errorMessage));
         break;
@@ -142,6 +154,11 @@ export function connectionLostNotice(): NoticeRow {
 /** An extension failed inside Pi; the turn goes on. */
 export function extensionNotice(failure: { extension: string; event: string; message: string }): NoticeRow {
   return { kind: "notice", name: "Extension failed", tone: "notice", text: `${failure.extension} on ${failure.event}: ${failure.message}` };
+}
+
+/** An answer stopped before any of it streamed: empty, and marked as the others are. */
+function stoppedAnswer(): AssistantRow {
+  return { kind: "assistant", text: "", thinking: "", done: true, stopReason: "aborted" };
 }
 
 /** The wait as Pi's retry indicator counts it: whole seconds, rounded up (Math.ceil(delayMs / 1000)). */

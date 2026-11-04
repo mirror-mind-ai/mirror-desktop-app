@@ -1,4 +1,13 @@
-import type { ClientRequestBody, HostEvent, HostResultBody, SessionEvent, SessionSummary, TranscriptEntry } from "@mirror-desktop/protocol";
+import type {
+  ClientRequestBody,
+  HostEvent,
+  HostResultBody,
+  PromptDisposition,
+  SessionEvent,
+  SessionSummary,
+  StreamingBehavior,
+  TranscriptEntry,
+} from "@mirror-desktop/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ConnectionLostError, type HostConnection, HostRequestError } from "../host/client.ts";
@@ -10,6 +19,7 @@ import {
   connectionLost,
   type Conversation,
   isWorking,
+  queueMessage,
   retryRead,
   retrySessions,
   selectJourney,
@@ -83,6 +93,9 @@ function openingHost() {
 }
 
 const entry = (journeyId: string): Conversation | undefined => useConversations.getState().entries[journeyId];
+
+/** A conversation's live-control fields when nothing is queued, sending, awaited or running in Pi. */
+const quiet = { queue: { steering: [], followUp: [] }, sending: [], awaitingEcho: false, piRunning: false };
 const event = (sessionId: string, sessionEvent: SessionEvent): HostEvent => ({ type: "session.event", sessionId, at: 0, event: sessionEvent });
 
 /** Pick `journeyId`, type `text`, send it, and wait until the host accepted the prompt. */
@@ -98,7 +111,7 @@ describe("selecting a Journey", () => {
   it("makes it current with an empty conversation, and asks the host for nothing", () => {
     selectJourney("garden");
     expect(useConversations.getState().current).toBe("garden");
-    expect(entry("garden")).toEqual({ status: "idle", draft: "", rows: [], running: false, shown: { kind: "new" } });
+    expect(entry("garden")).toEqual({ status: "idle", draft: "", rows: [], running: false, shown: { kind: "new" }, ...quiet });
   });
 
   it("keeps each Journey's draft and conversation when switching between them", () => {
@@ -207,6 +220,7 @@ describe("sending", () => {
       running: false,
       failure: "The project path does not exist.",
       shown: { kind: "new" },
+      ...quiet,
     });
     expect(isWorking(entry("garden"))).toBe(false);
 
@@ -238,7 +252,8 @@ describe("sending", () => {
     expect(entry("garden")).toMatchObject({ status: "open", running: false, rows: [], draft: "Hello" });
   });
 
-  it("keeps a new draft typed while the open was failing, rather than overwrite it", async () => {
+  // D11: every return to the draft is terminal Pi's merge, which never discards.
+  it("puts the message back before a new draft typed while the open was failing, losing neither", async () => {
     const open = deferred<HostResultBody>();
     const { client } = stubHost(() => open.promise);
     selectJourney("garden");
@@ -247,7 +262,7 @@ describe("sending", () => {
     setDraft("garden", "Something else");
     open.reject(new HostRequestError("session_open_failed", "No."));
     await sending;
-    expect(entry("garden")?.draft).toBe("Something else");
+    expect(entry("garden")?.draft).toBe("Hello\n\nSomething else");
   });
 
   it("lets two Journeys open at once, each with its own state", async () => {
@@ -342,18 +357,290 @@ describe("stopping", () => {
     ]);
   });
 
-  it("does not throw when the host refuses to stop", async () => {
+  it("rejects a stop the host refused, so the composer can say why, and resolves one the connection's loss ended", async () => {
+    let failure: Error = new HostRequestError("session_not_found", "No open session session-1.");
     const { client } = stubHost(async (body) => {
       if (body.type === "session.open") return opened("session-1", "garden");
       if (body.type === "session.prompt") return { type: "session.prompt", sessionId: "session-1", disposition: "started" };
-      throw new HostRequestError("session_not_found", "No open session session-1.");
+      throw failure;
     });
     await sendInto(client, "garden", "Hello");
+    applyHostEvent(event("session-1", { type: "queue_update", steering: ["a"], followUp: [] }));
+    await expect(abort(client, "garden")).rejects.toThrow("No open session session-1.");
+    expect(entry("garden")).toMatchObject({ running: true, queue: { steering: ["a"], followUp: [] }, draft: "" });
+
+    failure = new ConnectionLostError(false, 1006, "");
     await expect(abort(client, "garden")).resolves.toBeUndefined();
   });
 });
 
+describe("a running turn", () => {
+  /** Garden's host: plain prompts start at once; a steer, a follow-up and a stop wait on the answer the test gives. */
+  function liveHost() {
+    const answers: Deferred<HostResultBody>[] = [];
+    const stops: Deferred<HostResultBody>[] = [];
+    const stub = stubHost((body) => {
+      switch (body.type) {
+        case "session.open":
+          return Promise.resolve(opened("session-1", "garden"));
+        case "session.prompt": {
+          if (!body.streamingBehavior) return Promise.resolve(answered("started"));
+          const answer = deferred<HostResultBody>();
+          answers.push(answer);
+          return answer.promise;
+        }
+        case "session.abort": {
+          const stop = deferred<HostResultBody>();
+          stops.push(stop);
+          return stop.promise;
+        }
+        default:
+          throw new Error(`the stub host does not answer ${body.type}`);
+      }
+    });
+    return { ...stub, answers, stops };
+  }
+  const answered = (disposition: PromptDisposition): HostResultBody => ({ type: "session.prompt", sessionId: "session-1", disposition });
+  const stopped = (steering: string[], followUp: string[]): HostResultBody => ({
+    type: "session.abort",
+    sessionId: "session-1",
+    withdrawn: { steering, followUp },
+  });
+  const piSays = (sessionEvent: SessionEvent) => applyHostEvent(event("session-1", sessionEvent));
+  const delivered = (text: string) => {
+    piSays({ type: "message_start", role: "user" });
+    piSays({ type: "message_end", role: "user", text });
+  };
+  const userRows = () => entry("garden")?.rows.filter((row) => row.kind === "user");
+
+  /** Garden answering "Hello", Pi's echo of it already in. */
+  async function answering(client: HostConnection): Promise<void> {
+    await sendInto(client, "garden", "Hello");
+    piSays({ type: "agent_start" });
+    delivered("Hello");
+  }
+
+  function queue(client: HostConnection, text: string, behavior: StreamingBehavior): Promise<PromptDisposition | undefined> {
+    setDraft("garden", text);
+    return queueMessage(client, "garden", behavior);
+  }
+
+  it("queues a steer: no row, the draft cleared, listed as sending until Pi answers, then as Pi's queue says", async () => {
+    const { client, requests, answers } = liveHost();
+    await answering(client);
+    const queuing = queue(client, "Keep it short", "steer");
+
+    expect(requests.at(-1)).toEqual({ type: "session.prompt", sessionId: "session-1", text: "Keep it short", streamingBehavior: "steer" });
+    expect(entry("garden")).toMatchObject({ draft: "", rows: [{ kind: "user", text: "Hello" }], sending: [{ text: "Keep it short", behavior: "steer" }] });
+    piSays({ type: "queue_update", steering: ["Keep it short"], followUp: [] });
+    answers[0]?.resolve(answered("queued"));
+    await expect(queuing).resolves.toBe("queued");
+    expect(entry("garden")).toMatchObject({ sending: [], queue: { steering: ["Keep it short"], followUp: [] }, running: true });
+  });
+
+  it("queues nothing for an empty draft, nor while nothing runs", async () => {
+    const { client, requests } = liveHost();
+    await answering(client);
+    await queue(client, "   ", "steer");
+    piSays({ type: "agent_settled", aborted: false });
+    await queue(client, "Later", "followUp");
+    expect(requests.map((request) => request.type)).toEqual(["session.open", "session.prompt"]);
+    expect(entry("garden")?.draft).toBe("Later");
+  });
+
+  it("swallows only its own prompt's echo, and draws each message Pi delivers where Pi took it, in Pi's words", async () => {
+    const { client, answers } = liveHost();
+    await answering(client);
+    expect(entry("garden")).toMatchObject({ rows: [{ kind: "user", text: "Hello" }], awaitingEcho: false });
+
+    const queuing = queue(client, "/skill:short", "steer");
+    answers[0]?.resolve(answered("queued"));
+    await queuing;
+    piSays({ type: "text_delta", delta: "Looking." });
+    piSays({ type: "message_end", role: "assistant", text: "Looking.", stopReason: "toolUse" });
+    // Pi delivers what it queued, its skill expanded.
+    delivered("Answer in one line.");
+    expect(entry("garden")?.rows).toEqual([
+      { kind: "user", text: "Hello" },
+      { kind: "assistant", text: "Looking.", thinking: "", done: true, stopReason: "toolUse" },
+      { kind: "user", text: "Answer in one line." },
+    ]);
+  });
+
+  it("takes the echo that arrives before its prompt's answer as its own", async () => {
+    const answer = deferred<HostResultBody>();
+    const { client } = stubHost((body) => (body.type === "session.open" ? Promise.resolve(opened("session-1", "garden")) : answer.promise));
+    selectJourney("garden");
+    setDraft("garden", "Hello");
+    const sending = send(client, "garden");
+    await vi.waitFor(() => expect(entry("garden")?.running).toBe(true));
+    piSays({ type: "agent_start" });
+    delivered("Hello");
+    answer.resolve(answered("started"));
+    await expect(sending).resolves.toBe("started");
+    expect(entry("garden")?.rows).toEqual([{ kind: "user", text: "Hello" }]);
+  });
+
+  it("draws a steer that started a run of its own once, from its echo, running from Pi's agent_start", async () => {
+    const { client, answers } = liveHost();
+    await answering(client);
+    const queuing = queue(client, "Keep it short", "steer");
+    // The turn ended as the steer left.
+    piSays({ type: "agent_settled", aborted: false });
+    expect(entry("garden")?.running).toBe(false);
+    answers[0]?.resolve(answered("started"));
+    await queuing;
+    piSays({ type: "agent_start" });
+    expect(entry("garden")?.running).toBe(true);
+    delivered("Keep it short");
+    expect(userRows()).toEqual([
+      { kind: "user", text: "Hello" },
+      { kind: "user", text: "Keep it short" },
+    ]);
+    expect(entry("garden")?.sending).toEqual([]);
+  });
+
+  it("keeps a deferred message listed as sending until its echo, or until the run it started settles without one", async () => {
+    const { client, answers } = liveHost();
+    await answering(client);
+    const first = queue(client, "Keep it short", "steer");
+    answers[0]?.resolve(answered("deferred"));
+    await expect(first).resolves.toBe("deferred");
+    // Pi put it after the turn that was settling: it is nowhere in Pi's queue.
+    piSays({ type: "agent_settled", aborted: false });
+    expect(entry("garden")?.sending).toMatchObject([{ text: "Keep it short" }]);
+    piSays({ type: "agent_start" });
+    delivered("Keep it short");
+    expect(entry("garden")?.sending).toEqual([]);
+    expect(userRows()?.at(-1)).toEqual({ kind: "user", text: "Keep it short" });
+
+    const second = queue(client, "/skill:short", "followUp");
+    answers[1]?.resolve(answered("deferred"));
+    await second;
+    piSays({ type: "agent_settled", aborted: false });
+    piSays({ type: "agent_start" });
+    delivered("Answer in one line.");
+    expect(entry("garden")?.sending).toMatchObject([{ text: "/skill:short" }]);
+    piSays({ type: "agent_settled", aborted: false });
+    expect(entry("garden")?.sending).toEqual([]);
+  });
+
+  it("runs on Pi's own word: agent_start starts it, agent_settled ends it, whoever began the run", async () => {
+    const { client } = liveHost();
+    await answering(client);
+    piSays({ type: "agent_settled", aborted: false });
+    expect(entry("garden")).toMatchObject({ running: false, piRunning: false });
+    piSays({ type: "agent_start" });
+    expect(entry("garden")).toMatchObject({ running: true, piRunning: true });
+    piSays({ type: "agent_start" });
+    piSays({ type: "agent_settled", aborted: false });
+    expect(entry("garden")).toMatchObject({ running: false, piRunning: false });
+  });
+
+  it("keeps on screen a queue Pi still holds when a turn settles", async () => {
+    const { client } = liveHost();
+    await answering(client);
+    piSays({ type: "queue_update", steering: [], followUp: ["More"] });
+    piSays({ type: "agent_settled", aborted: false });
+    expect(entry("garden")?.queue).toEqual({ steering: [], followUp: ["More"] });
+  });
+
+  it("puts a refused message back in the draft before what was typed meanwhile, and rejects so the composer can say why", async () => {
+    const { client, answers } = liveHost();
+    await answering(client);
+    const queuing = queue(client, "Keep it short", "steer");
+    setDraft("garden", "Also");
+    answers[0]?.reject(new HostRequestError("prompt_refused", "No model is selected for this session."));
+    await expect(queuing).rejects.toThrow("No model is selected for this session.");
+    expect(entry("garden")).toMatchObject({ draft: "Keep it short\n\nAlso", sending: [], running: true });
+  });
+
+  it("leaves a queued message Pi ran as a command nowhere, and the turn running", async () => {
+    const { client, answers } = liveHost();
+    await answering(client);
+    const queuing = queue(client, "/report", "steer");
+    answers[0]?.resolve(answered("handled"));
+    await expect(queuing).resolves.toBe("handled");
+    expect(entry("garden")).toMatchObject({ draft: "", sending: [], running: true, rows: [{ kind: "user", text: "Hello" }] });
+  });
+
+  it("takes back a prompt Pi ran as a command, and runs only if Pi's own events say a run began", async () => {
+    const answers: Deferred<HostResultBody>[] = [];
+    const { client } = stubHost((body) => {
+      if (body.type === "session.open") return Promise.resolve(opened("session-1", "garden"));
+      const answer = deferred<HostResultBody>();
+      answers.push(answer);
+      return answer.promise;
+    });
+    selectJourney("garden");
+    setDraft("garden", "/report");
+    const plain = send(client, "garden");
+    await vi.waitFor(() => expect(answers).toHaveLength(1));
+    answers[0]?.resolve(answered("handled"));
+    await expect(plain).resolves.toBe("handled");
+    expect(entry("garden")).toMatchObject({ rows: [], draft: "", running: false, awaitingEcho: false });
+
+    // A command that starts a run of its own, begun before the answer came.
+    setDraft("garden", "/report");
+    const starting = send(client, "garden");
+    await vi.waitFor(() => expect(answers).toHaveLength(2));
+    piSays({ type: "agent_start" });
+    answers[1]?.resolve(answered("handled"));
+    await starting;
+    expect(entry("garden")).toMatchObject({ rows: [], running: true });
+  });
+
+  it("stops: what Pi withdrew back in the draft, steering then follow-ups then what was typed, once, whichever comes first", async () => {
+    const { client, requests, stops } = liveHost();
+    await answering(client);
+    setDraft("garden", "c");
+    const stopping = abort(client, "garden");
+    expect(requests.at(-1)).toEqual({ type: "session.abort", sessionId: "session-1" });
+    piSays({ type: "queue_update", steering: [], followUp: [] });
+    piSays({ type: "agent_settled", aborted: true });
+    stops[0]?.resolve(stopped(["a"], ["b"]));
+    await stopping;
+    expect(entry("garden")).toMatchObject({ draft: "a\n\nb\n\nc", running: false, queue: { steering: [], followUp: [] } });
+
+    // The answer before Pi's settle, into an empty draft.
+    piSays({ type: "agent_start" });
+    setDraft("garden", "");
+    const again = abort(client, "garden");
+    stops[1]?.resolve(stopped(["a"], ["b"]));
+    await again;
+    expect(entry("garden")).toMatchObject({ draft: "a\n\nb", running: false });
+    piSays({ type: "agent_settled", aborted: true });
+    expect(entry("garden")).toMatchObject({ draft: "a\n\nb", running: false });
+  });
+});
+
 describe("the connection lost", () => {
+  it("puts what was queued and what was on its way back in the draft, once each, before what was typed", async () => {
+    const answer = deferred<HostResultBody>();
+    const { client } = stubHost((body) => {
+      if (body.type === "session.open") return Promise.resolve(opened("session-1", "garden"));
+      if (!(body.type === "session.prompt" && body.streamingBehavior)) return Promise.resolve({ type: "session.prompt", sessionId: "session-1", disposition: "started" });
+      return answer.promise;
+    });
+    await sendInto(client, "garden", "Hello");
+    setDraft("garden", "c");
+    const inFlight = queueMessage(client, "garden", "steer");
+    // Pi had queued it, and the queue said so, but its answer was lost.
+    applyHostEvent(event("session-1", { type: "queue_update", steering: ["a", "c"], followUp: ["b"] }));
+    setDraft("garden", "d");
+
+    connectionLost();
+    answer.reject(new ConnectionLostError(false, 1006, ""));
+    await expect(inFlight).resolves.toBeUndefined();
+    expect(entry("garden")).toMatchObject({
+      draft: "a\n\nc\n\nb\n\nd",
+      queue: { steering: [], followUp: [] },
+      sending: [],
+      running: false,
+      awaitingEcho: false,
+    });
+  });
+
   it("settles every answering conversation with a notice after the partial answer, and leaves the rest alone", async () => {
     const { client } = openingHost();
     await sendInto(client, "garden", "Hello");
@@ -372,7 +659,7 @@ describe("the connection lost", () => {
     ]);
     expect(entry("beds")).toMatchObject({ status: "open", running: false });
     expect(entry("beds")?.rows.some((row) => row.kind === "notice")).toBe(false);
-    expect(entry("attic")).toEqual({ status: "idle", draft: "Later", rows: [], running: false, shown: { kind: "new" } });
+    expect(entry("attic")).toEqual({ status: "idle", draft: "Later", rows: [], running: false, shown: { kind: "new" }, ...quiet });
   });
 });
 

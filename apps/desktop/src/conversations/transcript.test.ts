@@ -74,9 +74,37 @@ describe("reduceRows", () => {
     expect(rows).toEqual([{ kind: "notice", name: "Retry 1 of 3", tone: "notice", text: "overloaded · retrying in 2s" }]);
   });
 
-  it("ignores events the transcript does not render", () => {
+  it("ignores events the transcript does not render, and messages that are not the person's or the answer's", () => {
     expect(reduceRows([], { type: "agent_start" })).toEqual([]);
-    expect(reduceRows([], { type: "message_end", role: "user", text: "hi" })).toEqual([]);
+    expect(reduceRows([], { type: "queue_update", steering: ["Shorter"], followUp: [] })).toEqual([]);
+    // Mirror's context arrives as a custom message; a tool's result is on its tool row.
+    expect(reduceRows([], { type: "message_end", role: "custom", text: "[mirror context]" })).toEqual([]);
+    expect(reduceRows([], { type: "message_end", role: "toolResult", text: "beds" })).toEqual([]);
+    expect(reduceRows([], { type: "message_end", role: "bashExecution", text: "" })).toEqual([]);
+  });
+
+  it("draws a message Pi delivered into the turn as the person's, after what streamed before it", () => {
+    const rows = play(
+      { type: "text_delta", delta: "Looking." },
+      { type: "message_end", role: "assistant", text: "Looking.", stopReason: "toolUse" },
+      { type: "message_start", role: "user" },
+      { type: "message_end", role: "user", text: "One line per bed" },
+      { type: "text_delta", delta: "North." },
+    );
+    expect(rows).toEqual([
+      { kind: "assistant", text: "Looking.", thinking: "", done: true, stopReason: "toolUse" },
+      { kind: "user", text: "One line per bed" },
+      { kind: "assistant", text: "North.", thinking: "", done: false },
+    ]);
+  });
+
+  it("keeps a stop that landed before any of the answer streamed as an empty stopped answer", () => {
+    const stopped = { type: "message_end", role: "assistant", text: "", stopReason: "aborted", errorMessage: "Request was aborted" } as const;
+    expect(reduceRows([], stopped)).toEqual([{ kind: "assistant", text: "", thinking: "", done: true, stopReason: "aborted" }]);
+    // Where the answer was streaming, the stop closes it instead.
+    expect(play({ type: "text_delta", delta: "Half" }, { ...stopped, text: "Half" })).toEqual([
+      { kind: "assistant", text: "Half", thinking: "", done: true, stopReason: "aborted" },
+    ]);
   });
 });
 
@@ -137,6 +165,12 @@ describe("rowsOf", () => {
         0,
       ),
     ).toEqual([providerErrorNotice("Overloaded"), { kind: "assistant", text: "Half an ans", thinking: "", done: true, stopReason: "aborted" }]);
+  });
+
+  it("keeps a stop that landed before any of the answer, as it was drawn live", () => {
+    expect(rowsOf([{ kind: "assistant", text: "", thinking: "", stopReason: "aborted", errorMessage: "Request was aborted" }], 0)).toEqual([
+      { kind: "assistant", text: "", thinking: "", done: true, stopReason: "aborted" },
+    ]);
   });
 
   it("draws a tool call whose result never came as one that did not succeed", () => {

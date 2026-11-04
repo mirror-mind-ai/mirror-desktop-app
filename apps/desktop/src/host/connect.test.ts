@@ -41,6 +41,9 @@ const lease = (): ConnectionLease => ({ cancelled: false, client: null });
 
 beforeEach(() => resetAllStores());
 
+/** A conversation's live-control fields when nothing is queued, sending, awaited or running in Pi. */
+const quiet = { queue: { steering: [], followUp: [] }, sending: [], awaitingEcho: false, piRunning: false };
+
 describe("connecting to the host", () => {
   it("starts out connecting, on the first attempt", () => {
     expect(useHost.getState()).toMatchObject({ status: "connecting", client: null, identity: null, failure: null, attempt: 0 });
@@ -72,7 +75,7 @@ describe("connecting to the host", () => {
     await connectToHost(async () => ({ client, host: identity }), lease());
     useConversations.setState({
       current: "garden",
-      entries: { garden: { status: "open", draft: "", rows: [], running: true, session: { id: "session-1", file: SESSION_FILE, cwd: "/Users/test/garden", thinkingLevel: "medium" }, shown: { kind: "file", file: SESSION_FILE } } },
+      entries: { garden: { status: "open", draft: "", rows: [], running: true, session: { id: "session-1", file: SESSION_FILE, cwd: "/Users/test/garden", thinkingLevel: "medium" }, shown: { kind: "file", file: SESSION_FILE }, ...quiet } },
     });
     const settled: HostEvent = { type: "session.event", sessionId: "session-1", at: 0, event: { type: "agent_settled", aborted: false } };
     client.onEvent(settled);
@@ -138,7 +141,7 @@ describe("connecting to the host", () => {
   it("reports a connection lost after the host was ready, and settles the conversations", async () => {
     const { client } = healthy();
     await connectToHost(async () => ({ client, host: identity }), lease());
-    useConversations.setState({ entries: { garden: { status: "open", draft: "", rows: [], running: true, session: { id: "session-1", file: SESSION_FILE, cwd: "/Users/test/garden", thinkingLevel: "medium" }, shown: { kind: "file", file: SESSION_FILE } } } });
+    useConversations.setState({ entries: { garden: { status: "open", draft: "", rows: [], running: true, session: { id: "session-1", file: SESSION_FILE, cwd: "/Users/test/garden", thinkingLevel: "medium" }, shown: { kind: "file", file: SESSION_FILE }, ...quiet } } });
 
     client.onClose(new ConnectionLostError(false, 1006, ""));
     expect(useHost.getState()).toMatchObject({ status: "failed", client: null, failure: "The connection to the host was lost.", lostAfterReady: true });
