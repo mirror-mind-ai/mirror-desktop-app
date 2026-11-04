@@ -270,3 +270,58 @@ describe("a notice in the transcript", () => {
     expect(within(transcript()).getByText("Good morning.")).toBeTruthy();
   });
 });
+
+describe("a stopped answer in the transcript", () => {
+  const follows = (first: Element, second: Element) => (first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  const stoppedAt = (text: string): SessionEvent => ({ type: "message_end", role: "assistant", text, stopReason: "aborted", errorMessage: "Request was aborted" });
+
+  it("is marked Stopped, muted, under what it said, and is not called a provider's error", async () => {
+    await converse("Water the beds", [
+      { type: "agent_start" },
+      { type: "message_start", role: "user" },
+      { type: "message_end", role: "user", text: "Water the beds" },
+      { type: "message_start", role: "assistant" },
+      { type: "text_delta", delta: "Watering the north" },
+      stoppedAt("Watering the north"),
+      { type: "agent_end" },
+      { type: "agent_settled", aborted: true },
+    ]);
+    await idle();
+    const stopped = within(transcript()).getByText("Stopped");
+    expect(stopped.className).toBe("text-meta text-muted");
+    expect(follows(within(transcript()).getByText("Watering the north"), stopped)).toBe(true);
+    expect(within(transcript()).queryByText("Provider error")).toBeNull();
+  });
+
+  it("is marked where it was when the session is read from its file, one stopped before any of it too", async () => {
+    serveFakeHost({
+      models: [model],
+      journeys: [garden],
+      turns: [],
+      sessions: {
+        garden: [
+          {
+            file: "/Users/test/.pi/agent/sessions/--Users-test-garden--/2025-10-29T09-00-00-000Z_garden-water.jsonl",
+            id: "garden-water",
+            title: "Water the beds",
+            created: Date.UTC(2025, 9, 29, 9),
+            modified: Date.UTC(2025, 9, 29, 10),
+            entries: [
+              { kind: "user", text: "Water the beds" },
+              { kind: "assistant", text: "Watering the north", thinking: "", stopReason: "aborted", errorMessage: "Request was aborted" },
+              { kind: "user", text: "Water the south" },
+              { kind: "assistant", text: "", thinking: "", stopReason: "aborted", errorMessage: "Request was aborted" },
+            ],
+          },
+        ],
+      },
+    });
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(await screen.findByRole("button", { name: "Garden" }));
+    await within(transcript()).findByText("Watering the north");
+    const stops = within(transcript()).getAllByText("Stopped");
+    expect(stops).toHaveLength(2);
+    expect(follows(within(transcript()).getByText("Water the south"), stops[1] as Element)).toBe(true);
+  });
+});

@@ -8,9 +8,12 @@ import { ToolRow } from "./ToolRow.tsx";
 /**
  * One transcript row, as Pi draws it, on Mirror's tokens: the person's own
  * words on Pi's user-message ground, as typed; the answer with its thinking
- * and its Markdown in Pi's roles, the pulse beneath it while it streams; a
- * tool call on Pi's ground; a notice named; a diagnostic muted; and, atop a
- * session read from its file, how much of it the host left out, muted.
+ * and its Markdown in Pi's roles, the pulse beneath it while it streams, and
+ * "Stopped" beneath it, muted, when the person stopped it (Pi's terminal
+ * prints "Operation aborted" in its error color; a stop is the person's own
+ * act, not a fault); a tool call on Pi's ground; a notice named; a diagnostic
+ * muted; and, atop a session read from its file, how much of it the host
+ * left out, muted.
  */
 export function TranscriptRow({ row }: { row: Row }) {
   switch (row.kind) {
@@ -26,6 +29,7 @@ export function TranscriptRow({ row }: { row: Row }) {
               <Pulse />
             </span>
           ) : null}
+          {row.done && row.stopReason === "aborted" ? <p className="text-meta text-muted">Stopped</p> : null}
         </div>
       );
     case "tool":
