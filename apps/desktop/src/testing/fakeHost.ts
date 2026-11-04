@@ -28,9 +28,17 @@
 // session (`session.extension_error`, a host event a turn's fixture cannot
 // carry): they are sent after the prompt's answer and before the turn's events.
 //
-// `session.abort` is answered for a session the host opened, but its effect is
-// not played: the turn plays on as scripted, held or not. The story that needs
-// what Stop does to a turn (CV1.DS2.US2) scripts it.
+// While a held turn answers, a prompt sent as a steer or a follow-up is
+// queued as Pi queues it (CV1.DS2.US2): the queue is told with `queue_update`
+// before the answer, a user message the turn scripts after its prompt is
+// delivered from the queue (told again first), one never queued is recorded,
+// and so is a turn that settles with a message still queued, which Pi would
+// have delivered. A prompt with neither is refused as busy, as the real host
+// refuses it. `session.abort` plays what Pi does to the turn: the queue
+// withdrawn into the answer, a tool still running ended in error, the answer
+// ended where it was (or an empty one where the loop would have asked again),
+// and the run settled aborted. A turn can script `handled`, an extension
+// command Pi runs without a run, which plays nothing.
 //
 // What the world does not script (an unknown Journey or session, a turn that is
 // not next, a request type the fake host does not answer) is answered at once
@@ -67,7 +75,7 @@ import { listen, type ServerSide, type SocketPeer, type SocketServer, stopListen
 import { scriptIpc } from "./ipcDoor.ts";
 import { log } from "./traffic.ts";
 import { checkSessions, FakeDisk, type ScriptedSession } from "./fakeDisk.ts";
-import { parseTurn } from "./turns.ts";
+import { contentProblem, parseTurn } from "./turns.ts";
 import { record } from "./violations.ts";
 
 export interface ScriptedTurn {
@@ -79,6 +87,8 @@ export interface ScriptedTurn {
   readonly held?: boolean;
   /** Extensions that fail inside Pi on this turn, reported after the prompt's answer and before the events. */
   readonly extensionErrors?: readonly ExtensionFailure[];
+  /** Pi handles the prompt without a run, as an extension command: answered `handled`, nothing played. Its events are empty. */
+  readonly handled?: boolean;
 }
 
 /** An extension failing inside Pi, as the real host reports it for a session. */
@@ -94,7 +104,7 @@ export type ScriptedFailure =
   | { readonly request: JourneyRequest; readonly journey: string; readonly error: HostError };
 
 /** The requests made for one Journey, whose failures are scripted per Journey. */
-type JourneyRequest = "session.open" | "sessions.list" | "session.transcript";
+type JourneyRequest = "session.open" | "sessions.list" | "session.transcript" | "session.prompt";
 
 export type { ScriptedSession };
 
@@ -229,29 +239,43 @@ function checkWorld(world: World): HostIdentity {
   }
   checkSessions(world.sessions ?? {}, (id) => journeyOf(id)?.projectPath !== undefined, fail);
   world.turns.forEach((turn, index) => {
-    parseTurn(`turns[${index}] ("${turn.prompt}")`, turn.events);
+    if (turn.handled) {
+      if (turn.events.length > 0) throw new Error(`The fake host's world: turns[${index}] is handled without a run, so it plays no events`);
+    } else {
+      parseTurn(`turns[${index}] ("${turn.prompt}")`, turn.events);
+    }
     turn.extensionErrors?.forEach((failure, at) => {
       const parsed = HostEvent.safeParse({ type: "session.extension_error", sessionId: "session-1", ...failure });
       if (!parsed.success) throw fail(`turns[${index}].extensionErrors[${at}]`, parsed.error.issues[0]);
     });
-    for (const event of turn.events) {
-      if (event.type === "message_end" && event.role === "user" && event.text !== turn.prompt) {
-        throw new Error(
-          `The fake host's world: turns[${index}] is scripted for "${turn.prompt}" but its user message says "${event.text}"`,
-        );
-      }
+    // The first user message is the prompt's echo; a later one is a queued message Pi delivers.
+    const echo = turn.events.find((event) => event.type === "message_end" && event.role === "user");
+    if (echo?.type === "message_end" && echo.text !== turn.prompt) {
+      throw new Error(`The fake host's world: turns[${index}] is scripted for "${turn.prompt}" but its user message says "${echo.text}"`);
     }
   });
   return identity.data;
 }
 
+/** A turn being played in a session: what it has sent so far, and whether its prompt's echo is among it. */
+interface Playing {
+  readonly sessionId: string;
+  readonly journey: string;
+  readonly file: string;
+  readonly sent: SessionEvent[];
+  echoed: boolean;
+}
+
 class Held implements HeldTurn {
   readonly #events: SessionEvent[];
-  readonly #send: (event: SessionEvent) => void;
+  /** Sends one event, knowing the one after it: a delivery is told before its message starts. */
+  readonly #play: (event: SessionEvent, next: SessionEvent | undefined) => void;
+  readonly #done: () => void;
 
-  constructor(events: SessionEvent[], send: (event: SessionEvent) => void) {
+  constructor(events: SessionEvent[], play: (event: SessionEvent, next: SessionEvent | undefined) => void, done: () => void) {
     this.#events = events;
-    this.#send = send;
+    this.#play = play;
+    this.#done = done;
   }
 
   get remaining(): number {
@@ -259,7 +283,7 @@ class Held implements HeldTurn {
   }
 
   release(): void {
-    for (const event of this.#events.splice(0)) this.#send(event);
+    this.#sendFirst(this.#events.length);
   }
 
   releaseThrough(match: (event: SessionEvent) => boolean): void {
@@ -267,8 +291,64 @@ class Held implements HeldTurn {
     if (index === -1) {
       throw new Error(`The held turn has no event left that matches; ${this.#events.length} event(s) remain.`);
     }
-    for (const event of this.#events.splice(0, index + 1)) this.#send(event);
+    this.#sendFirst(index + 1);
   }
+
+  /** A stop: what is left is never sent. */
+  drop(): void {
+    this.#events.splice(0);
+  }
+
+  #sendFirst(count: number): void {
+    for (let sent = 0; sent < count; sent += 1) {
+      const event = this.#events.shift();
+      if (event === undefined) break;
+      this.#play(event, this.#events[0]);
+    }
+    if (count > 0 && this.#events.length === 0) this.#done();
+  }
+}
+
+/**
+ * What Pi emits when a run is stopped after `sent`: a tool still running ends
+ * in error, with its result message; the answer streaming ends where it was;
+ * when no answer is streaming and the loop would ask the model again (the
+ * answer had not begun, or the last one called tools), an empty answer is
+ * started and ended, stopped; then the run ends, if it had not, and settles
+ * aborted.
+ */
+function stoppedRun(sent: readonly SessionEvent[]): SessionEvent[] {
+  const stopped: SessionEvent[] = [];
+  const aborted = { stopReason: "aborted", errorMessage: "Request was aborted" } as const;
+  const ended = new Set(sent.flatMap((event) => (event.type === "tool_end" ? [event.toolCallId] : [])));
+  for (const event of sent) {
+    if (event.type !== "tool_start" || ended.has(event.toolCallId)) continue;
+    stopped.push(
+      { type: "tool_end", toolCallId: event.toolCallId, toolName: event.toolName, isError: true, resultText: "Operation aborted" },
+      { type: "message_start", role: "toolResult" },
+      { type: "message_end", role: "toolResult", text: "Operation aborted" },
+    );
+  }
+  const lastStart = sent.findLastIndex((event) => event.type === "message_start");
+  const opened = sent[lastStart];
+  const streaming = opened?.type === "message_start" && opened.role === "assistant" && !sent.slice(lastStart + 1).some((event) => event.type === "message_end");
+  if (streaming) {
+    const text = sent
+      .slice(lastStart + 1)
+      .map((event) => (event.type === "text_delta" ? event.delta : ""))
+      .join("");
+    stopped.push({ type: "message_end", role: "assistant", text, ...aborted });
+  } else {
+    const lastPrompt = sent.findLastIndex((event) => event.type === "message_end" && event.role === "user");
+    const answer = sent.slice(lastPrompt + 1).findLast((event) => event.type === "message_end" && event.role === "assistant");
+    const asksAgain = answer === undefined || (answer.type === "message_end" && answer.stopReason === "toolUse");
+    if (asksAgain && !sent.some((event) => event.type === "agent_end")) {
+      stopped.push({ type: "message_start", role: "assistant" }, { type: "message_end", role: "assistant", text: "", ...aborted });
+    }
+  }
+  if (!sent.some((event) => event.type === "agent_end")) stopped.push({ type: "agent_end" });
+  stopped.push({ type: "agent_settled", aborted: true });
+  return stopped;
 }
 
 export class FakeHost implements SocketServer {
@@ -289,7 +369,9 @@ export class FakeHost implements SocketServer {
   readonly #failures: { readonly failure: ScriptedFailure; answered: boolean; failing: boolean }[];
   /** Per Journey scripted to hold its open: "waiting" for it, the reply "held", or "released". */
   readonly #heldOpens = new Map<string, "waiting" | { readonly send: () => void } | "released">();
-  #held: { readonly turn: Held; readonly sessionId: string } | null = null;
+  #held: { readonly turn: Held; readonly playing: Playing } | null = null;
+  /** Each open session's queue, as Pi keeps it: steering first. */
+  readonly #queues = new Map<string, { steering: string[]; followUp: string[] }>();
   #clock = CLOCK_START;
 
   constructor(world: World) {
@@ -448,11 +530,7 @@ export class FakeHost implements SocketServer {
         this.#transcript(connection, id, request);
         return;
       case "session.abort":
-        if (!this.#sessions.has(request.sessionId)) {
-          this.#unscripted(connection, id, `session.abort for ${request.sessionId}, a session the fake host never opened`);
-          return;
-        }
-        this.#reply(connection, { id, result: { type: "session.abort", sessionId: request.sessionId } });
+        this.#abort(connection, id, request.sessionId);
         return;
       case "session.open":
         this.#open(connection, id, request);
@@ -501,6 +579,7 @@ export class FakeHost implements SocketServer {
     }
     for (const sessionId of previous) {
       this.#sessions.delete(sessionId);
+      this.#queues.delete(sessionId);
       this.closedSessions.push(sessionId);
       log(`#${connection.side.id} session ${sessionId} closed by the next open for ${journey.id}`);
     }
@@ -584,7 +663,7 @@ export class FakeHost implements SocketServer {
 
   /** Whether the session's turn is still playing: held, with events left. */
   #answering(sessionId: string): boolean {
-    return this.#held !== null && this.#held.sessionId === sessionId && this.#held.turn.remaining > 0;
+    return this.#held !== null && this.#held.playing.sessionId === sessionId && this.#held.turn.remaining > 0;
   }
 
   /** The scripted failure `request` meets now, marked answered; null when it is not failing. */
@@ -598,10 +677,23 @@ export class FakeHost implements SocketServer {
   }
 
   #prompt(connection: Connection, id: string, request: SessionPrompt): void {
-    if (!this.#sessions.has(request.sessionId)) {
+    const open = this.#sessions.get(request.sessionId);
+    if (!open) {
       this.#unscripted(connection, id, `session.prompt for ${request.sessionId}, a session the fake host never opened`);
       return;
     }
+    const failure = this.#failing("session.prompt", open.journey);
+    if (failure) {
+      this.#error(connection, id, failure.code, failure.message);
+      return;
+    }
+    if (this.#answering(request.sessionId)) {
+      if (request.streamingBehavior) this.#queue(connection, id, request.sessionId, request.text, request.streamingBehavior);
+      // As the real host refuses it (turnControl.ts).
+      else this.#error(connection, id, "session_busy", "The session is still answering.");
+      return;
+    }
+    // Nothing answers: a steer or a follow-up starts a run, as Pi starts one.
     const next = this.#turns.find((candidate) => !candidate.played);
     if (!next) {
       this.#unscripted(connection, id, `session.prompt "${request.text}": no scripted turn is left`);
@@ -616,19 +708,105 @@ export class FakeHost implements SocketServer {
       return;
     }
     next.played = true;
-    const open = this.#sessions.get(request.sessionId);
-    if (open) this.#disk.record(open.journey, open.file, request.text, next.turn.events, this.#clock++);
-    this.#reply(connection, { id, result: { type: "session.prompt", sessionId: request.sessionId } });
-    for (const failure of next.turn.extensionErrors ?? []) {
-      this.#broadcastHostEvent({ type: "session.extension_error", sessionId: request.sessionId, ...failure });
-    }
-    const events = [...next.turn.events];
-    const send = (event: SessionEvent) => this.#broadcast(request.sessionId, event);
-    if (next.turn.held) {
-      this.#held = { turn: new Held(events, send), sessionId: request.sessionId };
+    if (next.turn.handled) {
+      this.#reply(connection, { id, result: { type: "session.prompt", sessionId: request.sessionId, disposition: "handled" } });
       return;
     }
-    for (const event of events) send(event);
+    this.#disk.prompted(open.journey, open.file, request.text, this.#clock++);
+    this.#reply(connection, { id, result: { type: "session.prompt", sessionId: request.sessionId, disposition: "started" } });
+    for (const extensionFailure of next.turn.extensionErrors ?? []) {
+      this.#broadcastHostEvent({ type: "session.extension_error", sessionId: request.sessionId, ...extensionFailure });
+    }
+    const playing: Playing = { sessionId: request.sessionId, journey: open.journey, file: open.file, sent: [], echoed: false };
+    const events = [...next.turn.events];
+    if (next.turn.held) {
+      const turn = new Held(events, (event, following) => this.#play(playing, event, following), () => this.#written(playing));
+      this.#held = { turn, playing };
+      return;
+    }
+    events.forEach((event, index) => this.#play(playing, event, events[index + 1]));
+    this.#written(playing);
+  }
+
+  /** A steer or a follow-up while the session answers: queued as Pi queues it, the queue told before the answer. */
+  #queue(connection: Connection, id: string, sessionId: string, text: string, behavior: "steer" | "followUp"): void {
+    // A queued message reaches the traffic log, and maybe the draft, without passing a turn's net.
+    const problem = contentProblem(text);
+    if (problem) record("unscripted", `session.prompt queued text the fixture net refuses: ${problem}`);
+    const queue = this.#queueOf(sessionId);
+    (behavior === "steer" ? queue.steering : queue.followUp).push(text);
+    this.#tellQueue(sessionId);
+    this.#reply(connection, { id, result: { type: "session.prompt", sessionId, disposition: "queued" } });
+  }
+
+  /**
+   * Send one event of the turn being played, doing first what Pi does around
+   * it: a queued message leaves the queue, told, before its echo starts; and
+   * a run that settles has delivered everything it held.
+   */
+  #play(playing: Playing, event: SessionEvent, next: SessionEvent | undefined): void {
+    if (event.type === "message_start" && event.role === "user" && playing.echoed && next?.type === "message_end" && next.role === "user") {
+      this.#deliver(playing.sessionId, next.text);
+    }
+    if (event.type === "message_end" && event.role === "user") playing.echoed = true;
+    if (event.type === "agent_settled" && !event.aborted) {
+      const queue = this.#queueOf(playing.sessionId);
+      const left = [...queue.steering, ...queue.followUp];
+      if (left.length > 0) {
+        record("unscripted", `the turn settled with ${left.map((text) => `"${text}"`).join(", ")} still queued, which Pi delivers before it settles`);
+      }
+    }
+    playing.sent.push(event);
+    this.#broadcast(playing.sessionId, event);
+  }
+
+  /** Take `text` from the session's queue, steering first and the first of equal texts, and tell the queue. */
+  #deliver(sessionId: string, text: string): void {
+    const queue = this.#queueOf(sessionId);
+    const list = queue.steering.includes(text) ? queue.steering : queue.followUp.includes(text) ? queue.followUp : undefined;
+    if (!list) {
+      record("unscripted", `the turn delivers "${text}", which was never queued`);
+      return;
+    }
+    list.splice(list.indexOf(text), 1);
+    this.#tellQueue(sessionId);
+  }
+
+  /** Stop the session's turn as Pi does, and answer with the queue it withdrew. */
+  #abort(connection: Connection, id: string, sessionId: string): void {
+    if (!this.#sessions.has(sessionId)) {
+      this.#unscripted(connection, id, `session.abort for ${sessionId}, a session the fake host never opened`);
+      return;
+    }
+    const queue = this.#queueOf(sessionId);
+    const withdrawn = { steering: queue.steering.splice(0), followUp: queue.followUp.splice(0) };
+    this.#tellQueue(sessionId);
+    const held = this.#held;
+    if (held && this.#answering(sessionId)) {
+      held.turn.drop();
+      for (const event of stoppedRun(held.playing.sent)) this.#play(held.playing, event, undefined);
+      this.#written(held.playing);
+    }
+    this.#reply(connection, { id, result: { type: "session.abort", sessionId, withdrawn } });
+  }
+
+  /** What a turn played, written to the session's file once it is over. */
+  #written(playing: Playing): void {
+    this.#disk.played(playing.journey, playing.file, playing.sent);
+  }
+
+  #queueOf(sessionId: string): { steering: string[]; followUp: string[] } {
+    let queue = this.#queues.get(sessionId);
+    if (!queue) {
+      queue = { steering: [], followUp: [] };
+      this.#queues.set(sessionId, queue);
+    }
+    return queue;
+  }
+
+  #tellQueue(sessionId: string): void {
+    const queue = this.#queueOf(sessionId);
+    this.#broadcast(sessionId, { type: "queue_update", steering: [...queue.steering], followUp: [...queue.followUp] });
   }
 
   /** A session event, stamped, to every open, authenticated connection, as the real host broadcasts. */

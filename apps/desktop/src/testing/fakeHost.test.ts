@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { HostClient, HostRequestError, hostEndpoint } from "../host/client.ts";
 import { endFakeHosts, outboundProblem, type ScriptedSession, serveFakeHost, type World } from "./fakeHost.ts";
 import { takeLog } from "./traffic.ts";
+import { loadTurn } from "./turns.ts";
 import { take } from "./violations.ts";
 
 const answer = (prompt: string): SessionEvent[] => [
@@ -194,6 +195,7 @@ describe("the fake host's sessions", () => {
     await expect(first.client.request({ type: "session.prompt", sessionId: "session-1", text: "Hello" })).resolves.toEqual({
       type: "session.prompt",
       sessionId: "session-1",
+      disposition: "started",
     });
     const played = answer("Hello").map((event) => event.type);
     await vi.waitFor(() => expect(eventTypes(first.events)).toEqual(played));
@@ -411,25 +413,230 @@ describe("the fake host's other answers", () => {
     await expect(other.client.request({ type: "auth.providers" })).resolves.toEqual({ type: "auth.providers", providers: [] });
   });
 
-  it("answers session.abort for a session it opened, and leaves the turn to play as scripted", async () => {
-    const host = serveFakeHost(world({ turns: [{ prompt: "Hello", events: answer("Hello"), held: true }] }));
-    const { client } = await connected(host.endpoint);
-    await client.request({ type: "session.open", journey: "garden" });
-    await client.request({ type: "session.prompt", sessionId: "session-1", text: "Hello" });
-    await expect(client.request({ type: "session.abort", sessionId: "session-1" })).resolves.toEqual({
-      type: "session.abort",
-      sessionId: "session-1",
-    });
-    expect(host.heldTurn().remaining).toBe(answer("Hello").length);
-    host.heldTurn().release();
-  });
-
   it("says a Journey's session runs where the world says, when not at its listed path", async () => {
     const host = serveFakeHost(world({ sessionCwds: { garden: "/Users/test/gardens/garden" } }));
     const { client } = await connected(host.endpoint);
     await expect(client.request({ type: "session.open", journey: "garden" })).resolves.toMatchObject({
       cwd: "/Users/test/gardens/garden",
     });
+  });
+});
+
+describe("the fake host and a running turn", () => {
+  /** A turn that takes a steer between a tool call and its second answer. */
+  const steered = (prompt: string, steer: string): SessionEvent[] => [
+    { type: "agent_start" },
+    { type: "message_start", role: "user" },
+    { type: "message_end", role: "user", text: prompt },
+    { type: "message_start", role: "assistant" },
+    { type: "text_delta", delta: "Looking." },
+    { type: "message_end", role: "assistant", text: "Looking.", stopReason: "toolUse" },
+    { type: "tool_start", toolCallId: "call-1", toolName: "bash", args: { command: "ls" } },
+    { type: "tool_end", toolCallId: "call-1", toolName: "bash", isError: false, resultText: "beds" },
+    { type: "message_start", role: "toolResult" },
+    { type: "message_end", role: "toolResult", text: "beds" },
+    { type: "message_start", role: "user" },
+    { type: "message_end", role: "user", text: steer },
+    { type: "message_start", role: "assistant" },
+    { type: "text_delta", delta: "Beds." },
+    { type: "message_end", role: "assistant", text: "Beds.", stopReason: "stop" },
+    { type: "agent_end" },
+    { type: "agent_settled", aborted: false },
+  ];
+  const queueUpdate = (steering: string[], followUp: string[] = []) => ({ type: "queue_update", steering, followUp });
+  const sessionEvents = (events: HostEvent[]) => events.flatMap((event) => (event.type === "session.event" ? [event.event] : []));
+
+  async function answering(turn: SessionEvent[], overrides: Partial<World> = {}) {
+    const host = serveFakeHost(world({ turns: [{ prompt: "Hello", events: turn, held: true }], ...overrides }));
+    const { client, events } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden" });
+    await client.request({ type: "session.prompt", sessionId: "session-1", text: "Hello" });
+    return { host, client, events };
+  }
+
+  it("queues a steer or a follow-up while a turn answers, telling the queue before the answer, and plays nothing for it", async () => {
+    const { host, client, events } = await answering(answer("Hello"));
+    await expect(
+      client.request({ type: "session.prompt", sessionId: "session-1", text: "Keep it short", streamingBehavior: "steer" }),
+    ).resolves.toEqual({ type: "session.prompt", sessionId: "session-1", disposition: "queued" });
+    expect(sessionEvents(events)).toEqual([queueUpdate(["Keep it short"])]);
+
+    await client.request({ type: "session.prompt", sessionId: "session-1", text: "Then say done", streamingBehavior: "followUp" });
+    expect(sessionEvents(events).at(-1)).toEqual(queueUpdate(["Keep it short"], ["Then say done"]));
+    expect(host.heldTurn().remaining).toBe(answer("Hello").length);
+
+    await client.request({ type: "session.abort", sessionId: "session-1" });
+  });
+
+  it("refuses a prompt with neither while a turn answers, as the real host does", async () => {
+    const { host, client } = await answering(answer("Hello"));
+    await expect(client.request({ type: "session.prompt", sessionId: "session-1", text: "Again" })).rejects.toMatchObject({
+      code: "session_busy",
+    });
+    host.heldTurn().release();
+    expect(take()).toEqual([]);
+  });
+
+  it("starts the next turn with a steer that arrives while nothing answers, as Pi does", async () => {
+    const host = serveFakeHost(world(withHello()));
+    const { client } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden" });
+    await expect(
+      client.request({ type: "session.prompt", sessionId: "session-1", text: "Hello", streamingBehavior: "steer" }),
+    ).resolves.toMatchObject({ disposition: "started" });
+  });
+
+  it("delivers a queued message where the turn says, the queue told first, and records one never queued", async () => {
+    const { host, client, events } = await answering(steered("Hello", "Keep it short"));
+    await client.request({ type: "session.prompt", sessionId: "session-1", text: "Keep it short", streamingBehavior: "steer" });
+    host.heldTurn().release();
+    await vi.waitFor(() => expect(sessionEvents(events).at(-1)).toEqual({ type: "agent_settled", aborted: false }));
+    const played = sessionEvents(events);
+    const delivery = played.findIndex((event) => event.type === "message_end" && event.role === "user" && event.text === "Keep it short");
+    expect(played.slice(delivery - 2, delivery + 1)).toEqual([
+      queueUpdate([]),
+      { type: "message_start", role: "user" },
+      { type: "message_end", role: "user", text: "Keep it short" },
+    ]);
+    expect(take()).toEqual([]);
+
+    const unqueued = await answering(steered("Hello", "Unqueued"));
+    unqueued.host.heldTurn().release();
+    expect(take()).toEqual([{ kind: "unscripted", detail: 'the turn delivers "Unqueued", which was never queued' }]);
+  });
+
+  it("records a turn that settles with a message still queued, which Pi would have delivered first", async () => {
+    const { host, client } = await answering(answer("Hello"));
+    await client.request({ type: "session.prompt", sessionId: "session-1", text: "More", streamingBehavior: "followUp" });
+    host.heldTurn().release();
+    expect(take()).toEqual([{ kind: "unscripted", detail: 'the turn settled with "More" still queued, which Pi delivers before it settles' }]);
+  });
+
+  it("stops a held turn as Pi does: the queue withdrawn, the answer ended where it was, the run settled aborted, then the answer", async () => {
+    const { host, client, events } = await answering(answer("Hello"));
+    host.heldTurn().releaseThrough((event) => event.type === "text_delta");
+    await client.request({ type: "session.prompt", sessionId: "session-1", text: "a", streamingBehavior: "steer" });
+    await client.request({ type: "session.prompt", sessionId: "session-1", text: "b", streamingBehavior: "followUp" });
+    const before = sessionEvents(events).length;
+
+    await expect(client.request({ type: "session.abort", sessionId: "session-1" })).resolves.toEqual({
+      type: "session.abort",
+      sessionId: "session-1",
+      withdrawn: { steering: ["a"], followUp: ["b"] },
+    });
+    expect(sessionEvents(events).slice(before)).toEqual([
+      queueUpdate([]),
+      { type: "message_end", role: "assistant", text: "Tides ", stopReason: "aborted", errorMessage: "Request was aborted" },
+      { type: "agent_end" },
+      { type: "agent_settled", aborted: true },
+    ]);
+    expect(host.heldTurn().remaining).toBe(0);
+    await expect(client.request({ type: "session.prompt", sessionId: "session-1", text: "c", streamingBehavior: "steer" })).rejects.toThrow(
+      /no scripted turn is left/,
+    );
+    take();
+    endFakeHosts();
+    expect(take()).toEqual([]);
+  });
+
+  it("stops a turn during a tool call with the tool's error, then an empty stopped answer where the next would be", async () => {
+    const { host, client, events } = await answering(loadTurn("tool-use").map((event) => (event.type === "message_end" && event.role === "user" ? { ...event, text: "Hello" } : event)));
+    host.heldTurn().releaseThrough((event) => event.type === "tool_start");
+    await vi.waitFor(() => expect(sessionEvents(events).at(-1)?.type).toBe("tool_start"));
+    const before = sessionEvents(events).length;
+    await client.request({ type: "session.abort", sessionId: "session-1" });
+    expect(sessionEvents(events).slice(before)).toEqual([
+      queueUpdate([]),
+      { type: "tool_end", toolCallId: "call-1", toolName: "bash", isError: true, resultText: "Operation aborted" },
+      { type: "message_start", role: "toolResult" },
+      { type: "message_end", role: "toolResult", text: "Operation aborted" },
+      { type: "message_start", role: "assistant" },
+      { type: "message_end", role: "assistant", text: "", stopReason: "aborted", errorMessage: "Request was aborted" },
+      { type: "agent_end" },
+      { type: "agent_settled", aborted: true },
+    ]);
+  });
+
+  it("stops a turn before its answer began with an empty stopped answer, and one whose answer ended with none", async () => {
+    const early = await answering(answer("Hello"));
+    early.host.heldTurn().releaseThrough((event) => event.type === "message_end");
+    await early.client.request({ type: "session.abort", sessionId: "session-1" });
+    expect(sessionEvents(early.events).slice(-4)).toEqual([
+      { type: "message_start", role: "assistant" },
+      { type: "message_end", role: "assistant", text: "", stopReason: "aborted", errorMessage: "Request was aborted" },
+      { type: "agent_end" },
+      { type: "agent_settled", aborted: true },
+    ]);
+
+    const late = await answering(answer("Hello"));
+    late.host.heldTurn().releaseThrough((event) => event.type === "agent_end");
+    await vi.waitFor(() => expect(sessionEvents(late.events).at(-1)?.type).toBe("agent_end"));
+    const before = sessionEvents(late.events).length;
+    await late.client.request({ type: "session.abort", sessionId: "session-1" });
+    expect(sessionEvents(late.events).slice(before)).toEqual([queueUpdate([]), { type: "agent_settled", aborted: true }]);
+  });
+
+  it("answers a stop on a session that is not answering with nothing withdrawn, and plays nothing", async () => {
+    const host = serveFakeHost(world());
+    const { client, events } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden" });
+    await expect(client.request({ type: "session.abort", sessionId: "session-1" })).resolves.toEqual({
+      type: "session.abort",
+      sessionId: "session-1",
+      withdrawn: { steering: [], followUp: [] },
+    });
+    expect(sessionEvents(events)).toEqual([queueUpdate([])]);
+  });
+
+  it("writes to its disk what a stopped turn played, and the messages it delivered, not what was scripted", async () => {
+    const { host, client } = await answering(steered("Hello", "Keep it short"));
+    await client.request({ type: "session.prompt", sessionId: "session-1", text: "Keep it short", streamingBehavior: "steer" });
+    host.heldTurn().releaseThrough((event) => event.type === "text_delta" && event.delta === "Beds.");
+    await client.request({ type: "session.abort", sessionId: "session-1" });
+    const read = await client.request({ type: "session.transcript", journey: "garden", sessionFile: "/Users/test/.pi/agent/sessions/session-1.jsonl" });
+    expect(read).toMatchObject({
+      entries: [
+        { kind: "user", text: "Hello" },
+        { kind: "assistant", text: "Looking.", stopReason: "toolUse" },
+        { kind: "tool", toolCallId: "call-1", result: "beds" },
+        { kind: "user", text: "Keep it short" },
+        { kind: "assistant", text: "Beds.", stopReason: "aborted", errorMessage: "Request was aborted" },
+      ],
+    });
+  });
+
+  it("answers a prompt a turn handles without a run as handled, and plays nothing", async () => {
+    const host = serveFakeHost(world({ turns: [{ prompt: "/report", events: [], handled: true }] }));
+    const { client, events } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden" });
+    await expect(client.request({ type: "session.prompt", sessionId: "session-1", text: "/report" })).resolves.toMatchObject({
+      disposition: "handled",
+    });
+    expect(events).toEqual([]);
+    expect(() => serveFakeHost(world({ turns: [{ prompt: "Hello", events: answer("Hello"), handled: true }] }))).toThrow(
+      'The fake host\'s world: turns[0] is handled without a run, so it plays no events',
+    );
+  });
+
+  it("fails a prompt as scripted for a Journey until the test stops it", async () => {
+    const refused = { code: "prompt_refused", message: "No model is selected for this session." } as const;
+    const host = serveFakeHost(world({ ...withHello(), failures: [{ request: "session.prompt", journey: "garden", error: refused }] }));
+    const { client } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden" });
+    await expect(client.request({ type: "session.prompt", sessionId: "session-1", text: "Hello" })).rejects.toMatchObject(refused);
+    host.stopFailing("session.prompt", "garden");
+    await expect(client.request({ type: "session.prompt", sessionId: "session-1", text: "Hello" })).resolves.toMatchObject({
+      disposition: "started",
+    });
+  });
+
+  it("records queued text the fixture net refuses", async () => {
+    const { client } = await answering(answer("Hello"));
+    await client.request({ type: "session.prompt", sessionId: "session-1", text: "see /Users/someone/notes", streamingBehavior: "steer" });
+    await client.request({ type: "session.abort", sessionId: "session-1" });
+    expect(take()).toEqual([
+      { kind: "unscripted", detail: "session.prompt queued text the fixture net refuses: a home directory other than /Users/test/" },
+    ]);
   });
 });
 

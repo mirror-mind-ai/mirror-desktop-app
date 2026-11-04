@@ -27,6 +27,12 @@
 //
 // Pi's events are projected onto the protocol's `SessionEvent` union and
 // handed to the server, which fans them out to authenticated clients.
+//
+// A running turn takes a message as a steer or a follow-up, and a stop
+// withdraws what it queued (turnControl.ts, CV1.DS2.US2). Prompts reach Pi
+// one at a time per session: Pi checks whether a run is active only after
+// awaiting its input handlers, so two prompts in flight could both start a
+// run. A stop is never held behind a prompt.
 
 import {
   type AgentSession,
@@ -40,13 +46,21 @@ import {
   SettingsManager,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import type { HostEvent, SessionEvent, SessionOpenResult } from "@mirror-desktop/protocol";
+import type {
+  HostEvent,
+  PromptDisposition,
+  QueuedMessages,
+  SessionEvent,
+  SessionOpenResult,
+  StreamingBehavior,
+} from "@mirror-desktop/protocol";
 import { fileURLToPath } from "node:url";
 
 import { bindSessionToJourney, conversationForSession, journeyProjectPath } from "./mirror.ts";
 import { containedSessionFile } from "./sessionIndex.ts";
 import { type OpenSessionFacts, planOpen, SessionBusyError } from "./sessionPolicy.ts";
 import { textOf } from "./transcript.ts";
+import { acceptPrompt, stopTurn } from "./turnControl.ts";
 
 export { SessionBusyError };
 
@@ -68,6 +82,10 @@ interface OpenSession {
   cwd: string;
   journey?: string;
   unsubscribe: () => void;
+  /** The host's own watchers of this session's projected events: a stop waiting for its run to end. */
+  watchers: Set<(event: SessionEvent) => void>;
+  /** The prompt Pi is accepting: the next one waits for it. */
+  accepting: Promise<unknown>;
 }
 
 export interface OpenSessionRequest {
@@ -191,11 +209,22 @@ export class SessionRegistry {
     }
 
     const sessionId = session.sessionId;
+    const watchers = new Set<(event: SessionEvent) => void>();
     const unsubscribe = session.subscribe((event) => {
       const projected = projectEvent(event);
-      if (projected) this.#emit({ type: "session.event", sessionId, at: Date.now(), event: projected });
+      if (!projected) return;
+      // The UI first: a stop answers once its run has settled, after the UI was told.
+      this.#emit({ type: "session.event", sessionId, at: Date.now(), event: projected });
+      for (const watch of [...watchers]) watch(projected);
     });
-    this.#sessions.set(sessionId, { session, cwd, ...(journey ? { journey } : {}), unsubscribe });
+    this.#sessions.set(sessionId, {
+      session,
+      cwd,
+      ...(journey ? { journey } : {}),
+      unsubscribe,
+      watchers,
+      accepting: Promise.resolve(),
+    });
 
     // Emits `session_start` to every extension — the Mirror logger opens its
     // conversation here — with no TUI: `ctx.hasUI` is false, so extensions
@@ -249,27 +278,39 @@ export class SessionRegistry {
   }
 
   /**
-   * Accept a prompt. The returned promise settles when the prompt is accepted,
-   * not when the run ends; completion is announced by the `agent_settled`
-   * event. A session that is already streaming refuses rather than guessing
-   * between steering and following up — those are explicit requests later.
+   * Hand a prompt to the session and answer with what Pi did with it, once Pi
+   * says (turnControl.ts): never when the run ends, which the `agent_settled`
+   * event announces. While the session answers, a prompt joins the run as a
+   * steer or a follow-up, and one with neither is refused as busy. Prompts
+   * reach Pi one at a time per session.
    */
-  prompt(sessionId: string, text: string): void {
+  prompt(sessionId: string, text: string, behavior?: StreamingBehavior): Promise<PromptDisposition> {
     const open = this.#get(sessionId);
-    if (open.session.isStreaming) throw new SessionBusyError("The session is still answering.");
-    open.session.prompt(text).catch((cause: unknown) => {
-      this.#emit({
-        type: "session.extension_error",
-        sessionId,
-        extension: "host",
-        event: "prompt",
-        message: cause instanceof Error ? cause.message : String(cause),
-      });
-    });
+    const accepted = open.accepting.then(() =>
+      acceptPrompt(this.#get(sessionId).session, text, behavior, {
+        hasCredential: async (provider) =>
+          this.#modelRuntime.hasConfiguredAuth(provider) || (await this.#modelRuntime.checkAuth(provider)) !== undefined,
+        onLateFailure: (cause) =>
+          this.#emit({
+            type: "session.extension_error",
+            sessionId,
+            extension: "host",
+            event: "prompt",
+            message: cause instanceof Error ? cause.message : String(cause),
+          }),
+      }),
+    );
+    open.accepting = accepted.catch(() => undefined);
+    return accepted;
   }
 
-  async abort(sessionId: string): Promise<void> {
-    await this.#get(sessionId).session.abort();
+  /** Stop the session's turn; answers with the queued messages withdrawn from it (turnControl.ts). */
+  async abort(sessionId: string): Promise<QueuedMessages> {
+    const open = this.#get(sessionId);
+    return stopTurn(open.session, (watch) => {
+      open.watchers.add(watch);
+      return () => open.watchers.delete(watch);
+    });
   }
 
   /**

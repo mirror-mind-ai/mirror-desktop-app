@@ -51,6 +51,7 @@ import { listSessions, SessionFileRefusedError, SessionsUnreadableError } from "
 import { SessionBusyError, SessionNotFoundError, SessionOpenError, SessionRegistry } from "./sessions.ts";
 import { shutdownHost } from "./shutdown.ts";
 import { readSessionTranscript } from "./transcript.ts";
+import { PromptRefusedError } from "./turnControl.ts";
 
 const MIRROR_PACKAGE_JSON = new URL(import.meta.resolve("mirror-mind/package.json"));
 const MIRROR_VERSION = (JSON.parse(readFileSync(MIRROR_PACKAGE_JSON, "utf8")) as { version: string })
@@ -132,12 +133,14 @@ async function handle(
         const transcript = await readSessionTranscript(journeyProjectPath(request.journey), request.sessionFile);
         return { type: "session.transcript", sessionFile: request.sessionFile, ...transcript };
       }
-      case "session.prompt":
-        sessions.prompt(request.sessionId, request.text);
-        return { type: "session.prompt", sessionId: request.sessionId };
-      case "session.abort":
-        await sessions.abort(request.sessionId);
-        return { type: "session.abort", sessionId: request.sessionId };
+      case "session.prompt": {
+        const disposition = await sessions.prompt(request.sessionId, request.text, request.streamingBehavior);
+        return { type: "session.prompt", sessionId: request.sessionId, disposition };
+      }
+      case "session.abort": {
+        const withdrawn = await sessions.abort(request.sessionId);
+        return { type: "session.abort", sessionId: request.sessionId, withdrawn };
+      }
       case "session.close":
         await sessions.close(request.sessionId);
         return { type: "session.close", sessionId: request.sessionId };
@@ -168,6 +171,7 @@ function failureOf(cause: unknown): HostError {
   if (cause instanceof SessionNotFoundError) return error("session_not_found", cause.message);
   if (cause instanceof SessionBusyError) return error("session_busy", cause.message);
   if (cause instanceof SessionOpenError) return error("session_open_failed", cause.message);
+  if (cause instanceof PromptRefusedError) return error("prompt_refused", cause.message);
   if (cause instanceof SessionFileRefusedError) return error("session_open_failed", cause.message);
   if (cause instanceof SessionsUnreadableError) return error("sessions_unreadable", cause.message);
   if (cause instanceof MirrorNotConfiguredError) return error("mirror_not_configured", cause.message);

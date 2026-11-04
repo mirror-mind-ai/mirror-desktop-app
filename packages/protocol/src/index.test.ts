@@ -155,6 +155,42 @@ describe("a Journey's sessions", () => {
   });
 });
 
+describe("steering, following up and stopping", () => {
+  const prompt = (extra: Record<string, unknown> = {}) => ({ type: "session.prompt", sessionId: "s1", text: "Keep it short", ...extra });
+
+  it("sends a prompt as a steer, as a follow-up, or as neither, and nothing else", () => {
+    for (const streamingBehavior of ["steer", "followUp"]) {
+      expect(ClientRequest.parse({ id: "r", request: prompt({ streamingBehavior }) }).request).toMatchObject({ streamingBehavior });
+    }
+    expect(ClientRequest.parse({ id: "r", request: prompt() }).request).not.toHaveProperty("streamingBehavior");
+    expect(() => ClientRequest.parse({ id: "r", request: prompt({ streamingBehavior: "nextTurn" }) })).toThrow();
+  });
+
+  it("answers a prompt with what Pi did with it, and only with that", () => {
+    for (const disposition of ["started", "queued", "handled", "deferred"]) {
+      const response = HostResponse.parse({ id: "r", result: { type: "session.prompt", sessionId: "s1", disposition } });
+      expect(response.result).toMatchObject({ disposition });
+    }
+    expect(() => HostResponse.parse({ id: "r", result: { type: "session.prompt", sessionId: "s1" } })).toThrow();
+    expect(() => HostResponse.parse({ id: "r", result: { type: "session.prompt", sessionId: "s1", disposition: "sent" } })).toThrow();
+  });
+
+  it("answers a stop with the messages it withdrew from Pi's queue, by kind", () => {
+    const withdrawn = { steering: ["a"], followUp: ["b", "c"] };
+    const response = HostResponse.parse({ id: "r", result: { type: "session.abort", sessionId: "s1", withdrawn } });
+    expect(response.result).toEqual({ type: "session.abort", sessionId: "s1", withdrawn });
+    expect(() => HostResponse.parse({ id: "r", result: { type: "session.abort", sessionId: "s1" } })).toThrow();
+    expect(() =>
+      HostResponse.parse({ id: "r", result: { type: "session.abort", sessionId: "s1", withdrawn: { steering: ["a"] } } }),
+    ).toThrow();
+  });
+
+  it("names a prompt the host refused before Pi took it", () => {
+    const refused = HostResponse.parse({ id: "r", error: { code: "prompt_refused", message: "No model is selected for this session." } });
+    expect(refused.error?.code).toBe("prompt_refused");
+  });
+});
+
 describe("auth protocol", () => {
   it("carries a sign-in flow: a prompt to answer, events to show, and the answer", () => {
     const prompt = HostEvent.parse({

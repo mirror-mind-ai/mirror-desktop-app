@@ -76,6 +76,22 @@ describe("a turn", () => {
     );
   });
 
+  it("takes a user message after its prompt, as Pi delivers a queued one mid-turn", () => {
+    const delivered = edited((list) => {
+      list.splice(8, 0, { type: "message_start", role: "user" }, { type: "message_end", role: "user", text: "Shorter" });
+    });
+    expect(() => parseTurn("plain.json", delivered)).not.toThrow();
+  });
+
+  it("carries no queue_update: the host says the queue as it changes, a turn does not script it", () => {
+    const events = edited((list) => {
+      list.splice(4, 0, { type: "queue_update", steering: ["Shorter"], followUp: [] });
+    });
+    expect(() => parseTurn("plain.json", events)).toThrow(
+      "plain.json: event 4 (queue_update): the host sends queue_update as the queue changes; a turn never carries it",
+    );
+  });
+
   it("closes every message it opens", () => {
     expect(() => parseTurn("plain.json", edited((list) => list.splice(7, 1)))).toThrow(
       "plain.json: event 7 (agent_end): the assistant message opened at event 3 is still open",

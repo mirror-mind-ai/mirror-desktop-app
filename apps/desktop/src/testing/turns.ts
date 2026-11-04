@@ -12,7 +12,9 @@
 //   deltas inside an assistant message, and the assistant's message_end text
 //   equal to the joined text deltas. That last rule holds for a message with
 //   one text block, which every fixture so far is; the projection joins
-//   several blocks with "\n", which deltas never carry;
+//   several blocks with "\n", which deltas never carry. A user message after
+//   the prompt's is a queued one Pi delivers mid-turn; `queue_update` is the
+//   host's to send as the queue changes, never a turn's;
 // - the content: invented and inert. No home directory but /Users/test/, and
 //   nothing shaped like a secret. Failure output prints fixture content, and it
 //   reaches terminals and the model behind a coding agent, so real paths, real
@@ -96,6 +98,11 @@ function parseEvent(name: string, index: number, raw: unknown): SessionEvent {
   }
   for (const key of Object.keys(raw as object)) {
     if (!(key in parsed.data)) throw new Error(`${where}: unknown field "${key}"`);
+  }
+  // The fake host tells the queue from what the test queued, as the real host
+  // relays Pi's; a scripted one would say a queue nobody made.
+  if (parsed.data.type === "queue_update") {
+    throw new Error(`${where}: the host sends queue_update as the queue changes; a turn never carries it`);
   }
   const problem = contentProblem(JSON.stringify(raw));
   if (problem) throw new Error(`${where}: ${problem}`);

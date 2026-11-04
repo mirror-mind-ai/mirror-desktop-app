@@ -7,8 +7,9 @@
 // then keeps them as Pi does: a session opened new is not listed until its
 // first prompt is played, since Pi writes a session's file only with its
 // first message, and is titled by that prompt; every prompt makes its session
-// the newest; and a turn played in a session is written into it, so the
-// session can be read back as the real host reads a file.
+// the newest; and what a turn played in a session is written into it, so the
+// session can be read back as the real host reads a file: a turn stopped
+// halfway is written as far as it went, with the messages delivered into it.
 //
 // The fake host owns everything else: which sessions are open, which Journey
 // they belong to, and the rules of opening one (fakeHost.ts).
@@ -111,12 +112,13 @@ export class FakeDisk {
   }
 
   /**
-   * A prompt played at `now` in the Journey's session at `file`, written as
-   * Pi writes it: a new session is listed from its first prompt, titled by
-   * it; the session becomes the newest; and its turn can be read back.
+   * A prompt that starts a run at `now` in the Journey's session at `file`,
+   * as Pi writes it: a new session is listed from its first prompt, titled by
+   * it, and the session becomes the newest. What the run says is written by
+   * `played`.
    */
-  record(journey: string, file: string, prompt: string, events: readonly SessionEvent[], now: number): void {
-    const session = this.#of(journey).find((candidate) => candidate.file === file);
+  prompted(journey: string, file: string, prompt: string, now: number): void {
+    const session = this.#find(journey, file);
     if (!session) return;
     if (!session.listed) {
       session.listed = true;
@@ -124,7 +126,15 @@ export class FakeDisk {
       session.created = now;
     }
     session.modified = now;
-    session.entries.push(...entriesOf(prompt, events));
+  }
+
+  /** What a run played in the Journey's session at `file`, written after it so it can be read back. */
+  played(journey: string, file: string, events: readonly SessionEvent[]): void {
+    this.#find(journey, file)?.entries.push(...entriesOf(events));
+  }
+
+  #find(journey: string, file: string): DiskSession | undefined {
+    return this.#of(journey).find((candidate) => candidate.file === file);
   }
 
   #of(journey: string): DiskSession[] {
@@ -137,9 +147,13 @@ export class FakeDisk {
   }
 }
 
-/** A played turn as the real host reads it back from the file: the prompt, each answer, each tool call with its result. */
-function entriesOf(prompt: string, events: readonly SessionEvent[]): TranscriptEntry[] {
-  const entries: TranscriptEntry[] = [{ kind: "user", text: prompt }];
+/**
+ * A played turn as the real host reads it back from the file: each message
+ * of the person's (the prompt, and any delivered into the turn), each answer,
+ * each tool call with its result.
+ */
+function entriesOf(events: readonly SessionEvent[]): TranscriptEntry[] {
+  const entries: TranscriptEntry[] = [];
   let thinking = "";
   for (const event of events) {
     switch (event.type) {
@@ -147,6 +161,10 @@ function entriesOf(prompt: string, events: readonly SessionEvent[]): TranscriptE
         thinking += event.delta;
         break;
       case "message_end":
+        if (event.role === "user") {
+          entries.push({ kind: "user", text: event.text });
+          break;
+        }
         if (event.role !== "assistant") break;
         if (event.text || thinking || event.errorMessage) {
           entries.push({

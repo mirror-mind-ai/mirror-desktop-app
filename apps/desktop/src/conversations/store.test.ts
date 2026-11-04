@@ -73,9 +73,9 @@ function openingHost() {
         sessions += 1;
         return opened(`session-${sessions}`, body.journey ?? "?");
       case "session.prompt":
-        return { type: "session.prompt", sessionId: body.sessionId };
+        return { type: "session.prompt", sessionId: body.sessionId, disposition: "started" };
       case "session.abort":
-        return { type: "session.abort", sessionId: body.sessionId };
+        return { type: "session.abort", sessionId: body.sessionId, withdrawn: { steering: [], followUp: [] } };
       default:
         throw new Error(`the stub host does not answer ${body.type}`);
     }
@@ -117,7 +117,7 @@ describe("sending", () => {
   it("opens the Journey's session on the first send, then prompts it, showing the message at once", async () => {
     const open = deferred<HostResultBody>();
     const { client, requests } = stubHost((body) =>
-      body.type === "session.open" ? open.promise : Promise.resolve({ type: "session.prompt", sessionId: "session-1" }),
+      body.type === "session.open" ? open.promise : Promise.resolve({ type: "session.prompt", sessionId: "session-1", disposition: "started" }),
     );
     selectJourney("garden");
     setDraft("garden", "  Hello  ");
@@ -150,7 +150,7 @@ describe("sending", () => {
   it("opens once: a send while the session opens is refused and keeps its draft, and later sends reuse the session", async () => {
     const open = deferred<HostResultBody>();
     const { client, requests } = stubHost((body) =>
-      body.type === "session.open" ? open.promise : Promise.resolve({ type: "session.prompt", sessionId: "session-1" }),
+      body.type === "session.open" ? open.promise : Promise.resolve({ type: "session.prompt", sessionId: "session-1", disposition: "started" }),
     );
     selectJourney("garden");
     setDraft("garden", "Hello");
@@ -180,7 +180,7 @@ describe("sending", () => {
     const { client } = stubHost(async (body) =>
       body.type === "session.open"
         ? opened("session-1", "garden", { diagnostics: ["mirror: could not bind the session"] })
-        : { type: "session.prompt", sessionId: "session-1" },
+        : { type: "session.prompt", sessionId: "session-1", disposition: "started" },
     );
     await sendInto(client, "garden", "Hello");
     expect(entry("garden")?.rows).toEqual([
@@ -197,7 +197,7 @@ describe("sending", () => {
         if (attempts === 1) throw new HostRequestError("session_open_failed", "The project path does not exist.");
         return opened("session-1", "garden");
       }
-      return { type: "session.prompt", sessionId: "session-1" };
+      return { type: "session.prompt", sessionId: "session-1", disposition: "started" };
     });
     await sendInto(client, "garden", "Hello");
     expect(entry("garden")).toEqual({
@@ -258,7 +258,7 @@ describe("sending", () => {
         opens.set(body.journey ?? "?", pending);
         return pending.promise;
       }
-      return Promise.resolve({ type: "session.prompt", sessionId: body.type === "session.prompt" ? body.sessionId : "?" });
+      return Promise.resolve({ type: "session.prompt", sessionId: body.type === "session.prompt" ? body.sessionId : "?", disposition: "started" });
     });
     selectJourney("garden");
     setDraft("garden", "Hello");
@@ -345,7 +345,7 @@ describe("stopping", () => {
   it("does not throw when the host refuses to stop", async () => {
     const { client } = stubHost(async (body) => {
       if (body.type === "session.open") return opened("session-1", "garden");
-      if (body.type === "session.prompt") return { type: "session.prompt", sessionId: "session-1" };
+      if (body.type === "session.prompt") return { type: "session.prompt", sessionId: "session-1", disposition: "started" };
       throw new HostRequestError("session_not_found", "No open session session-1.");
     });
     await sendInto(client, "garden", "Hello");
@@ -429,7 +429,7 @@ describe("a Journey's sessions", () => {
           opens += 1;
           return opened(body.sessionFile ? `resumed-${opens}` : `session-${opens}`, "garden", body.sessionFile ? { sessionFile: body.sessionFile, diagnostics: ["extension x failed"] } : {});
         case "session.prompt":
-          return { type: "session.prompt", sessionId: body.sessionId };
+          return { type: "session.prompt", sessionId: body.sessionId, disposition: "started" };
         default:
           throw new Error(`the stub host does not answer ${body.type}`);
       }

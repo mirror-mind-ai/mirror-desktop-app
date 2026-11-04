@@ -1,0 +1,21 @@
+[
+  { "type": "agent_start" },
+  { "type": "message_start", "role": "user" },
+  { "type": "message_end", "role": "user", "text": "Walk the beds and describe each one" },
+  { "type": "message_start", "role": "assistant" },
+  { "type": "text_delta", "delta": "Let me list " },
+  { "type": "text_delta", "delta": "them first." },
+  { "type": "message_end", "role": "assistant", "text": "Let me list them first.", "stopReason": "toolUse" },
+  { "type": "tool_start", "toolCallId": "call-beds", "toolName": "bash", "args": {"command":"ls /Users/test/garden/beds"} },
+  { "type": "tool_end", "toolCallId": "call-beds", "toolName": "bash", "isError": false, "durationMs": 40, "resultText": "north\nsouth\n" },
+  { "type": "message_start", "role": "toolResult" },
+  { "type": "message_end", "role": "toolResult", "text": "north\nsouth\n" },
+  { "type": "message_start", "role": "user" },
+  { "type": "message_end", "role": "user", "text": "One line per bed" },
+  { "type": "message_start", "role": "assistant" },
+  { "type": "text_delta", "delta": "North: tomatoes.\n" },
+  { "type": "text_delta", "delta": "South: roses." },
+  { "type": "message_end", "role": "assistant", "text": "North: tomatoes.\nSouth: roses.", "stopReason": "stop" },
+  { "type": "agent_end" },
+  { "type": "agent_settled", "aborted": false }
+]

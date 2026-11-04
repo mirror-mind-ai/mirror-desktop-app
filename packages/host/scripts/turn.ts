@@ -152,8 +152,8 @@ const settled = new Promise<void>((resolve) => {
 });
 
 const promptSentAt = performance.now();
-await request({ type: "session.prompt", sessionId: opened.sessionId, text: promptText }, "session.prompt");
-console.log(`${since()}  prompt accepted`);
+const accepted = await request({ type: "session.prompt", sessionId: opened.sessionId, text: promptText }, "session.prompt");
+console.log(`${since()}  prompt accepted (${accepted.disposition})`);
 await settled;
 console.log(`           turn took ${(performance.now() - promptSentAt).toFixed(0)} ms from prompt to settled`);
 

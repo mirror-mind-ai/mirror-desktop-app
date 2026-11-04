@@ -17,9 +17,10 @@ import { z } from "zod";
  * Bumped on any breaking change to the schemas below. A new field is one:
  * zod strips a field it does not know, so an older host would quietly ignore
  * it (an old host given `sessionFile` would open a new session instead of
- * resuming). The version, checked at hello, is what refuses the mismatch.
+ * resuming; one given `streamingBehavior` would refuse every steer as busy).
+ * The version, checked at hello, is what refuses the mismatch.
  */
-export const PROTOCOL_VERSION = "0.5.0";
+export const PROTOCOL_VERSION = "0.6.0";
 
 // --- Client → host --------------------------------------------------------
 
@@ -91,11 +92,23 @@ export const SessionTranscriptRequest = z.object({
   sessionFile: z.string().min(1),
 });
 
-/** Send a user prompt to an open session. Accepted, not completed: follow the events. */
+/**
+ * How a message joins a turn that is running, in Pi's own words: a steer is
+ * delivered after the assistant's current turn, before its next request; a
+ * follow-up when the run would otherwise end. Given while nothing runs, the
+ * message simply starts a run.
+ */
+export const StreamingBehavior = z.enum(["steer", "followUp"]);
+
+/**
+ * Send a user prompt to an open session. Accepted, not completed: follow the
+ * events. Without `streamingBehavior`, a session that is answering refuses it.
+ */
 export const SessionPromptRequest = z.object({
   type: z.literal("session.prompt"),
   sessionId: z.string().min(1),
   text: z.string().min(1),
+  streamingBehavior: StreamingBehavior.optional(),
 });
 
 export const SessionAbortRequest = z.object({
@@ -285,14 +298,36 @@ export const SessionTranscriptResult = z.object({
   earlier: z.number().int().nonnegative(),
 });
 
+/**
+ * What Pi did with an accepted prompt: started a run with it; queued it into
+ * the running one; handled it without the model (an extension command, or an
+ * extension that consumed the input); or deferred it to after the turn that
+ * was settling, when it starts a run of its own.
+ */
+export const PromptDisposition = z.enum(["started", "queued", "handled", "deferred"]);
+
 export const SessionPromptResult = z.object({
   type: z.literal("session.prompt"),
   sessionId: z.string().min(1),
+  disposition: PromptDisposition,
 });
 
+/** The messages a running turn held, steering first, as Pi keeps them. */
+export const QueuedMessages = z.object({
+  steering: z.array(z.string()),
+  followUp: z.array(z.string()),
+});
+
+/**
+ * A stop answers once the turn has ended, with the queued messages it
+ * withdrew so they are not sent unseen into the next turn: the UI gives them
+ * back to the person. A message Pi delivered while the stop landed is not
+ * among them; it is in the transcript.
+ */
 export const SessionAbortResult = z.object({
   type: z.literal("session.abort"),
   sessionId: z.string().min(1),
+  withdrawn: QueuedMessages,
 });
 
 export const SessionCloseResult = z.object({
@@ -376,6 +411,8 @@ export const HostError = z.object({
     "session_open_failed",
     "session_busy",
     "sessions_unreadable",
+    /** The host refused a prompt Pi could not start (no model, no credential, compaction), in its own words. */
+    "prompt_refused",
     "mirror_not_configured",
     "journey_not_found",
     "journey_has_no_project_path",
@@ -508,6 +545,9 @@ export type HelloRequest = z.infer<typeof HelloRequest>;
 export type PingRequest = z.infer<typeof PingRequest>;
 export type SessionOpenRequest = z.infer<typeof SessionOpenRequest>;
 export type SessionPromptRequest = z.infer<typeof SessionPromptRequest>;
+export type StreamingBehavior = z.infer<typeof StreamingBehavior>;
+export type PromptDisposition = z.infer<typeof PromptDisposition>;
+export type QueuedMessages = z.infer<typeof QueuedMessages>;
 export type ClientRequestBody = z.infer<typeof ClientRequestBody>;
 export type ClientRequest = z.infer<typeof ClientRequest>;
 export type HostIdentity = z.infer<typeof HostIdentity>;
