@@ -3,8 +3,8 @@
 # Plan Review — CV1.DS2.US2
 
 **Date:** 2026-11-04
-**Reviewed:** the first version of the plan, the story and the test guide, as authored at the Plan checkpoint (uncommitted).
-**Outcome:** the plan was revised with the twenty-two defects below; R1–R7 await the Navigator; the current version is [plan.md](plan.md).
+**Reviewed:** the first version of the plan, the story and the test guide, as authored at the Plan checkpoint and never committed; the revision is `ce84871`.
+**Outcome:** the plan was revised with the twenty-two defects below and the Navigator's rulings on R1–R7, each the recommended option; the current version is [plan.md](plan.md), approved on 2026-11-04.
 
 ## How it was reviewed
 
@@ -103,7 +103,9 @@ The Driver then verified the sharpest claims:
 
 ## Navigator rulings
 
-| Decision | Options | Recommendation |
+The Navigator took the Driver's recommendation on every decision.
+
+| Decision | Options | Recommendation, ruled |
 |---|---|---|
 | R1 — whose words `prompt_refused` carries (security 2, R1; engineer 10, R1) | (a) Pi's thrown message, as the plan had it, amending `HostError`'s rule; (b) the host's own words for the causes it can check before calling Pi — no model, no credential for the model's provider, compaction in progress — with the provider id, `session_busy` for a run in progress, and `internal_failure` with the words on stderr for everything else, as today; (c) the host's words with Pi's appended for an allowlist of Pi's messages | **(b)**: Pi's credential message carries absolute paths, verified; the host owns the facts (`session.model`, `modelRuntime.hasConfiguredAuth`/`checkAuth`, `isCompacting`) and the protocol's rule stays whole |
 | R2 — what a `handled` disposition shows (experience-designer 4, R3; engineer 1, R2; ai-engineer 1, R1) | (a) nothing: the draft cleared, no row, `running` left to the events; (b) that plus a toast once, "Pi ran that as a command; nothing was sent to the model."; (c) a muted row in the transcript | **(b)**: from the person's seat it is a message that went and left no trace, the same shape as a refusal, and a toast is where US3 put such words; (c) leaves a row Pi's file does not have. Either way `running` is never settled by `handled`: a command may start its own run |
