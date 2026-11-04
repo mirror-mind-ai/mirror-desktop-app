@@ -127,12 +127,21 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
     keeps one (`testing/fakeDisk.ts`); `closedSessions` says
     which sessions a later open closed. A world scripts the real host's
     failures with `failures` (`hello`, `journeys.list`, or one Journey's
-    `session.open`, `sessions.list` or `session.transcript`), answered until the
-    test calls `stopFailing()`; `heldOpens` holds a `session.open` until
-    `heldOpen(journey).release()`; a scripted turn's `extensionErrors` are
-    reported after its prompt's answer and before its events, as an
-    extension failing inside Pi. A scripted failure or hold the test never
-    exercised fails it at teardown.
+    `session.open`, `sessions.list`, `session.transcript` or `session.prompt`),
+    answered until the test calls `stopFailing()`; `heldOpens` holds a
+    `session.open` until `heldOpen(journey).release()`; a scripted turn's
+    `extensionErrors` are reported after its prompt's answer and before its
+    events, as an extension failing inside Pi; a turn scripted `handled` is
+    an extension command Pi runs without a run, and plays nothing. A
+    scripted failure or hold the test never exercised fails it at teardown.
+  - While a held turn answers, the fake host keeps Pi's queue (CV1.DS2.US2):
+    a steer or a follow-up is queued and told with `queue_update` before its
+    answer, a user message the turn scripts after its prompt is delivered
+    from the queue, and one never queued, or a turn that settles with the
+    queue full, is recorded. `session.abort` plays Pi's stop: the queue
+    withdrawn into the answer, a running tool ended in error, the answer
+    ended where it was, the run settled aborted. A fixture never carries
+    `queue_update`: the host says the queue as it changes.
   - happy-dom applies no CSS. A test that must prove which rule of
     `app.css` styles an element reads the stylesheet with
     `testing/stylesheet.ts`, which models the cascade those rules need.

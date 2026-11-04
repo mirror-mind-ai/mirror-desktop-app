@@ -446,3 +446,59 @@ run as one turn.
 - pending confirmation: `navigator_approval`
 - implementation remains blocked until Navigator approval; R1–R7 in
   [plan-review.md](plan-review.md) are ruled.
+
+## As Built
+
+Where the implementation departed from the plan above, and why. The
+decisions stand; these are the facts that refined them.
+
+- **Slices.** As US1 found, the protocol could not commit green alone:
+  the protocol, the host's turn control and the fake host landed together
+  (`631ef0c`), the store and the transcript's data next (`fdcfb59`), the
+  composer, the queue and the mark last (`e2cb40e`). Each was run green on
+  its own before its commit.
+- **The stop answers when the stopped run settles (D3).** Pi's `abort()`
+  resolves only once Pi is idle, and `_emitAgentSettled` runs any prompt
+  Pi deferred during the settle, a whole new run, before it resolves that
+  wait (`agent-session.js`: the deferred actions, then
+  `_resolveIdleWaitIfIdle`). Awaited bare, a Stop could have answered only
+  after that next run. `stopTurn` answers at the first of `abort()`
+  resolving and the stopped run's own `agent_settled`, read from the
+  host's projected events, then clears the queue the second time. A
+  mutation test holds both the second clear and this race.
+- **What the stop leaves out (D3).** It watches the same projected events
+  the UI receives, so the messages it keeps out of what it withdrew are
+  exactly the ones the UI was shown delivered.
+- **A deferred message (D2, D6).** "The screen treats `deferred` as
+  `queued`" was not quite possible: Pi's queue never lists a deferred
+  prompt, so `queue_update` would never name it. The store keeps it
+  listed as sending until its echo, or until the run it started settles
+  without one (Pi's expanded text may not match what was typed).
+- **`handled` and running (D8).** `send()` sets running before its
+  request, so a command that starts no run would have left the composer
+  running for good. The store keeps Pi's own word (`piRunning`, from
+  `agent_start` and `agent_settled`), and `handled` takes running back to
+  it: a command's run, begun before the answer, still shows as running.
+- **One rule for a failed queued request (D10).** The client rejects a
+  lost connection's pending requests first and calls `onClose` in the
+  same step, so `connectionLost()` always runs before the request's own
+  handler. A message still listed as sending when its request fails goes
+  back to the draft, whatever the failure; one the loss already returned
+  is no longer listed.
+- **The fake host's stop (D13).** An empty stopped answer is played only
+  where Pi's loop would ask the model again: the answer had not begun, or
+  the last one called tools. After a final answer, a stop only settles
+  the run aborted. A tool still running ends with its `toolResult`
+  message too, as the tool-use fixture shows Pi writes one. The disk
+  writes the person's messages from the echoes it played (the prompt's
+  and every delivery), no longer from the prompt string.
+- **The refusal on screen (Scope 6).** The fake host's scripted failures
+  fail every prompt of a Journey until stopped, so a refused steer, after
+  an accepted prompt, cannot be staged in a UI test. The UI test refuses
+  a plain prompt, which is where the host's own refusals happen (no
+  model, no credential and compaction are checked only when Pi would
+  start a run); the store's tests prove a refused steer returned to the
+  draft before what was typed.
+- **The turn script.** `npm run turn` prints the disposition the host
+  answered, so the real turn shows whether the answer comes before the
+  first event (the stop condition on `preflightResult`).
