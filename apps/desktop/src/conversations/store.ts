@@ -19,21 +19,15 @@
 // latest look of its Journey may write what it read.
 //
 // While a turn runs, a message joins it as a steer or a follow-up
-// (CV1.DS2.US2): it is listed as sending until Pi answers, then shown as
-// Pi's queue says, and drawn in the transcript only when Pi delivers it,
-// from Pi's echo, where Pi took it. The store draws its own prompt at once
-// and swallows that prompt's echo. Running follows Pi's own word as well as
-// the store's sends: agent_start starts it, agent_settled ends it. Stop puts
-// back in the draft what Pi withdrew; a refusal and a lost connection put
-// back theirs; all three by terminal Pi's merge, which never discards what
-// was typed.
+// (CV1.DS2.US2), drawn only when Pi delivers it; Stop, a refusal and a lost
+// connection give back what they took. The running turn's rules are pure, in
+// liveTurn.ts; the store sends, and applies them.
 
 import type {
   HostEvent,
   HostResultBody,
   Journey,
   PromptDisposition,
-  QueuedMessages,
   SessionEvent,
   SessionSummary,
   StreamingBehavior,
@@ -42,6 +36,7 @@ import { create } from "zustand";
 
 import { failureOf, type HostConnection } from "../host/client.ts";
 import { registerStore } from "../stores/registry.ts";
+import { afterEvent, answered, type LiveTurn, lostWithTheHost, QUIET, returnToDraft, type Sending } from "./liveTurn.ts";
 import { connectionLostNotice, extensionNotice, reduceRows, type Row, rowsOf } from "./transcript.ts";
 
 export interface Session {
@@ -78,32 +73,12 @@ export interface SessionsList {
 /** Reading what the conversation shows: the Journey's list first, then the session's file. */
 export type Reading = { readonly status: "reading" } | { readonly status: "failed"; readonly failure: string };
 
-/**
- * A message sent into a running turn that Pi has not taken into its queue
- * yet. One Pi deferred to after the turn that was settling is in no queue of
- * Pi's: it stays here until its echo, or until the run it started settles,
- * so it is never nowhere.
- */
-export interface Sending {
-  readonly text: string;
-  readonly behavior: StreamingBehavior;
-  /** Deferred by Pi: waiting for the run it will start, or in it. */
-  readonly deferred?: "waiting" | "running";
-}
+export type { Sending };
 
-export interface Conversation {
+/** A conversation: its draft and rows, its running turn (liveTurn.ts), and the session it has open and shows. */
+export interface Conversation extends LiveTurn {
   readonly status: ConversationStatus;
-  readonly draft: string;
   readonly rows: Row[];
-  /** A turn is under way: the store sent a prompt, or Pi said a run began, and it has not settled. */
-  readonly running: boolean;
-  /** Pi's own word that a run is going: an agent_start not followed by agent_settled yet. */
-  readonly piRunning: boolean;
-  /** The messages Pi holds for the running turn, as its last queue_update said, steering first. */
-  readonly queue: QueuedMessages;
-  readonly sending: readonly Sending[];
-  /** The store's own prompt is on its way to Pi: the next user message Pi echoes is that one, already drawn. */
-  readonly awaitingEcho: boolean;
   /** The Journey's open session. It may not be the one shown: a pick is a look, and only a send opens. */
   readonly session?: Session;
   readonly failure?: string;
@@ -121,18 +96,7 @@ export interface ConversationsState {
 }
 
 const initialState: ConversationsState = { current: null, entries: {} };
-const NOTHING_QUEUED: QueuedMessages = { steering: [], followUp: [] };
-const IDLE: Conversation = {
-  status: "idle",
-  draft: "",
-  rows: [],
-  running: false,
-  shown: { kind: "new" },
-  queue: NOTHING_QUEUED,
-  sending: [],
-  awaitingEcho: false,
-  piRunning: false,
-};
+const IDLE: Conversation = { status: "idle", draft: "", rows: [], shown: { kind: "new" }, ...QUIET };
 
 /**
  * Bumped by every reset. An action that was waiting on the host when the
@@ -359,13 +323,7 @@ export async function queueMessage(
   }
   if (mine !== epoch) return undefined;
   const { disposition } = accepted;
-  update(journeyId, (conversation) => ({
-    ...conversation,
-    sending:
-      disposition === "deferred"
-        ? conversation.sending.map((other) => (other === sending ? { ...other, deferred: "waiting" } : other))
-        : conversation.sending.filter((other) => other !== sending),
-  }));
+  update(journeyId, (conversation) => ({ ...conversation, sending: answered(conversation.sending, sending, disposition) }));
   return disposition;
 }
 
@@ -399,15 +357,6 @@ export async function abort(client: HostConnection, journeyId: string): Promise<
 }
 
 /**
- * Terminal Pi's merge for whatever goes back in the draft: the returned
- * texts, then what the draft holds, each blank one dropped, joined by blank
- * lines. Nothing typed is ever discarded.
- */
-function returnToDraft(returned: readonly string[], draft: string): string {
-  return [...returned, draft].filter((text) => text.trim() !== "").join("\n\n");
-}
-
-/**
  * The connection to the host ended. A conversation whose answer was
  * streaming has nothing pending to reject (the prompt was answered before
  * the first event), so it is settled here: not running, and a notice after
@@ -422,24 +371,19 @@ function returnToDraft(returned: readonly string[], draft: string): string {
 export function connectionLost(): void {
   useConversations.setState((state) => ({
     entries: Object.fromEntries(
-      Object.entries(state.entries).map(([journeyId, conversation]) => [journeyId, lostWithTheHost(conversation)]),
+      Object.entries(state.entries).map(([journeyId, conversation]) => [journeyId, lost(conversation)]),
     ),
   }));
 }
 
-function lostWithTheHost(conversation: Conversation): Conversation {
-  const held = [...conversation.queue.steering, ...conversation.queue.followUp, ...conversation.sending.map((sending) => sending.text)];
-  const returned = held.filter((text, index) => held.indexOf(text) === index);
+function lost(conversation: Conversation): Conversation {
   const answering = conversation.running && conversation.status === "open";
-  if (!answering && returned.length === 0 && !conversation.awaitingEcho && !conversation.piRunning) return conversation;
+  const taken = lostWithTheHost(conversation);
+  if (!answering && !taken) return conversation;
   return {
     ...conversation,
     ...(answering ? { running: false, rows: [...conversation.rows, connectionLostNotice()] } : {}),
-    queue: NOTHING_QUEUED,
-    sending: [],
-    awaitingEcho: false,
-    piRunning: false,
-    draft: returned.length > 0 ? returnToDraft(returned, conversation.draft) : conversation.draft,
+    ...taken,
   };
 }
 
@@ -469,45 +413,10 @@ export function applyHostEvent(event: HostEvent, client?: HostConnection): void 
   if (sessionEvent.type === "agent_settled" && client) void refreshSessions(client, journeyId);
 }
 
-/** One of Pi's events folded into the conversation of its session; its rows only when that session is shown. */
+/** One of Pi's events folded into the conversation of its session: its live state, and its rows when that session is shown. */
 function folded(conversation: Conversation, event: SessionEvent, shown: boolean): Conversation {
-  const rows = (into: Conversation) => (shown ? reduceRows(into.rows, event) : into.rows);
-  switch (event.type) {
-    case "agent_start":
-      // A run begun by anything, a send or not: a deferred message's run is now the one it waits in.
-      return {
-        ...conversation,
-        running: true,
-        piRunning: true,
-        sending: conversation.sending.map((sending) => (sending.deferred === "waiting" ? { ...sending, deferred: "running" } : sending)),
-      };
-    case "agent_settled":
-      return {
-        ...conversation,
-        rows: rows(conversation),
-        running: false,
-        piRunning: false,
-        awaitingEcho: false,
-        // A deferred message its run never echoed (Pi delivered it in other words) is not sending any more.
-        sending: conversation.sending.filter((sending) => sending.deferred !== "running"),
-      };
-    case "queue_update":
-      return { ...conversation, queue: { steering: event.steering, followUp: event.followUp } };
-    case "message_end":
-      if (event.role !== "user") break;
-      // The store drew its own prompt when it sent it.
-      if (conversation.awaitingEcho) return { ...conversation, awaitingEcho: false };
-      return { ...conversation, rows: rows(conversation), sending: withoutFirst(conversation.sending, event.text) };
-    default:
-      break;
-  }
-  return { ...conversation, rows: rows(conversation) };
-}
-
-/** `sending` without the first message whose text is `text`: Pi has delivered it. */
-function withoutFirst(sending: readonly Sending[], text: string): readonly Sending[] {
-  const at = sending.findIndex((message) => message.text === text);
-  return at === -1 ? sending : [...sending.slice(0, at), ...sending.slice(at + 1)];
+  const { changes, draws } = afterEvent(conversation, event);
+  return { ...conversation, ...changes, ...(draws && shown ? { rows: reduceRows(conversation.rows, event) } : {}) };
 }
 
 /** List the Journey's sessions; then, unless a pick or a send came first, show the most recent. */
