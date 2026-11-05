@@ -94,6 +94,12 @@ be written by two processes (TD-005).
 **Setup.** Terminal 1: `cd ~/dev/workspace/mirror-desktop-app && npm run dev`.
 Terminal 2: `cd ~/dev/workspace/automation`. In the window, pick
 Automation, open the sessions list in the header and pick "New session".
+A new session takes its model and thinking level from Pi's settings
+(`claude-sonnet-5-5`, thinking `medium`, since 2026-11-05 19:48); a
+resumed one keeps what its file records, as Pi restores it, so the
+session the real turn left (`claude-fable-5`, thinking `max`) would
+resume with those. After the first send, the header reads
+`anthropic/claude-sonnet-5-5` and `thinking medium`.
 
 | Step | Do | Check |
 |---|---|---|
