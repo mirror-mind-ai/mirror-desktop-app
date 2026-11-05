@@ -86,29 +86,35 @@ surviving a stop and counting a steered run as one turn.
 
 ## Navigator Validation
 
-In the window (`npm run dev`), on a Journey the Navigator names (the
-automation Journey served US1 and US3), with a terminal open in that
-Journey's project path:
+In the window, on the automation Journey (named by the Navigator), with a
+second terminal in its project path. Terminal Pi looks at the session only
+after the app has quit: Pi has no lock, and a session open in both would
+be written by two processes (TD-005).
 
-| Step | Do | Expected observation |
+**Setup.** Terminal 1: `cd ~/dev/workspace/mirror-desktop-app && npm run dev`.
+Terminal 2: `cd ~/dev/workspace/automation`. In the window, pick
+Automation, open the sessions list in the header and pick "New session".
+
+| Step | Do | Check |
 |---|---|---|
-| 1 | Send a prompt that takes several tool calls ("List the top-level folders of this project one at a time, with a sentence on each, using one tool call per folder"); in the terminal, `mirror conversations` | The answer streams with tool rows; Send is replaced by Steer and Follow up, then Stop; the line says Enter sends before its next step, Option+Enter after it finishes, Escape stops it; `mirror conversations` shows the conversation open: this is the baseline |
-| 2 | While it runs, type "One word per folder from here on" and press Enter | The draft empties; "Sending: …" for a moment, then "Steering: One word per folder from here on" above the text box with "Stop puts them back in the draft." under it; when the current assistant turn ends, the lines go and the message appears in the transcript as yours, after the tool rows so far; the answer changes course after it |
-| 3 | While it still runs, type "Then say done." and press Option+Enter | "Follow-up: Then say done." above the text box; the message is delivered after the answer would have ended, appears as yours, and "done" follows it; the queue area is gone; Send is back |
-| 4 | In the terminal, `pi -r` and pick the session; then `mirror conversations` | Both messages are in the transcript where the desktop showed them; the steered turn is one Mirror turn: the same conversation, one more exchange, not three; quit without sending |
-| 5 | Send a prompt for a long answer ("Write 600 words on tides"); when a paragraph has streamed, press Escape | The text stops where it was with "Stopped" under it; the queue area is absent; Send is back; the text box has focus; `mirror conversations` shows the same conversation still open, none ended, none new |
-| 6 | Send "Continue from where you stopped, in one sentence." | The answer follows in the same session; `mirror conversations` still shows the same conversation |
-| 7 | Send another long prompt; while it streams type "a" Enter, "b" Option+Enter, then type "c" without sending; press Escape | The queue shows "Steering: a" then "Follow-up: b"; after Escape the draft reads "a", a blank line, "b", a blank line, "c", the queue area is gone, and the partial answer is marked "Stopped"; neither "a" nor "b" was sent (`pi -r` shows no user message with either), and the next send's answer does not act on them |
-| 8 | Send a long prompt and press Escape before the first word streams | The transcript shows your message and an empty answer marked "Stopped"; Send is back |
-| 9 | Send a prompt that runs a slow tool ("Run `sleep 20` and then tell me the time"); press Escape while the tool row is open | The tool row ends with an error, an empty answer marked "Stopped" follows it, Send is back |
-| 10 | Quit the app, relaunch, pick the Journey | The session read from its file shows the stopped answers marked "Stopped" where they were, and the steered messages in place |
+| 1 | Send "List the top-level folders of this project one at a time, with a sentence on each, using one tool call per folder" | Send gives way to Steer, Follow up and Stop; the line under the text box reads "Pi is answering. Enter sends before its next step, Option+Enter after it finishes, Escape stops it." |
+| 2 | While tool rows still appear, type "One word per folder from here on" and press Enter | The text box empties; above it, "Steering: One word per folder from here on" (after a moment of "Sending: …") and "Stop puts them back in the draft."; when Pi's current step ends, the line goes and the message shows in the transcript as yours, after the tool rows so far; the answers get shorter after it |
+| 3 | While it still runs, type "Then say done." and press Option+Enter | "Follow-up: Then say done." above the text box, not a new line in it; after the answer would have ended, it shows as yours and Pi answers "done"; the queue area goes; Send is back |
+| 4 | Terminal 2: `mirror conversations --journey automation`, note the top id (X); then `mirror recall X` | One user message with the step 1 prompt (shown twice: the older defect below), no user message for the steer or the follow-up, and one Mirror reply holding the whole answer, "done" included |
+| 5 | Send "Write 600 words on tides"; when a paragraph has streamed, press Escape | The text stops where it was, with "Stopped" under it, small and grey; Send is back; the cursor is in the text box; `mirror conversations --journey automation` still has X on top, nothing new |
+| 6 | Send "Continue from where you stopped, in one sentence." | A one-sentence answer in the same transcript; X still on top |
+| 7 | Send "Write 600 words on rivers"; while it streams type "a" + Enter, "b" + Option+Enter, then "c" without sending; press Escape | Before Escape: "Steering: a" then "Follow-up: b"; after: the text box reads a, blank line, b, blank line, c; the queue area is gone; the answer is marked "Stopped". Then empty the text box and send "Say only: ok": the answer is ok and mentions neither a nor b |
+| 8 | Send "Write 600 words on forests" and press Escape before any word appears | Your message, then "Stopped" alone; Send is back |
+| 9 | Send "Run sleep 20 and then tell me the time"; press Escape while the bash row is open | The bash row ends as an error, "Stopped" under it; Send is back |
+| 10 | Quit the app (Cmd+Q); Terminal 2: `pi -r`, pick the newest session; read it; quit Pi without sending | The steer and the follow-up are where the desktop showed them; neither "a" nor "b" is a message; the stops are there as Pi's "Operation aborted" |
+| 11 | Terminal 1: `npm run dev` again; pick Automation | The session shows each stopped answer marked "Stopped" where it was, the empty ones from steps 8 and 9 included, and the steer and follow-up in place |
 
-**Pass:** every observation holds. **Fail:** any does not; or a queued
-message is delivered into a later turn after a stop; or a stop ends or
-replaces the Mirror conversation; or a steered turn shows as more than one
-Mirror turn; or a steer or follow-up shows twice, or not at all, in the
-transcript; or Enter while running leaves the draft in place; or
-Option+Enter inserts a line instead of queueing.
+**Pass:** every check holds. **Fail:** any does not; or a queued message
+reaches a later turn after a stop; or a stop ends or replaces the Mirror
+conversation (a new id on top); or the steer or the follow-up is logged as
+a Mirror user message of its own; or a steer or follow-up shows twice, or
+not at all, in the transcript; or Enter while running leaves the draft;
+or Option+Enter inserts a line.
 
 Consciously left out of the window, proven against the fake host and the
 stub only: a run that fails with a follow-up queued, which cannot be
@@ -136,5 +142,23 @@ Automated, 2026-11-04, on `e2cb40e` with Pi 1.4.0 and Mirror 0.38.0:
   0.6.0 with Pi 1.4.0 and Mirror 0.38.0; a client speaking 0.5.0 is
   refused by name (`unsupported_protocol_version`).
 
-Pending: the real turn on a Journey the Navigator names, and the
-Navigator's route.
+The real turn, 2026-11-05, on the automation Journey the Navigator named
+(`npm run turn --workspace packages/host -- --journey automation --prompt
+"Reply with the single word: pong"`): the session opened bound to
+automation; the answer `prompt accepted (started)` arrived in the same
+millisecond as `agent_start`, 3.8 s after the prompt left, since Pi says
+"started" only after Mirror's context step in `before_agent_start`; the
+system and custom (Mirror's context) messages Pi echoes came as their own
+roles, which the transcript ignores; "pong" answered; the session closed
+and the host exited 0; `mirror conversations` shows it as `039b206b` on
+automation. A steer typed in a turn's first seconds therefore waits as
+"Sending: …" for that long (the stop condition on serialized prompts),
+which step 2 of the route can show.
+
+Found by the real turn, older than this story: every prompt sent from the
+desktop host is logged twice as a user message in Mirror (`039b206b`
+today; US1's `83af4af9` and `ab43069c`, and US3's `7070fc32` before it),
+while a prompt sent from terminal Pi into the same conversation is logged
+once. Not this story's to fix; it goes to Debt Review as a Change Request.
+
+Pending: the Navigator's route.

@@ -502,3 +502,8 @@ decisions stand; these are the facts that refined them.
 - **The turn script.** `npm run turn` prints the disposition the host
   answered, so the real turn shows whether the answer comes before the
   first event (the stop condition on `preflightResult`).
+- **The route (Validation Route).** Terminal Pi now reads the session only
+  after the app has quit (steps 10 and 11 of the test guide), because a
+  session open in both is written by two processes (TD-005); the Mirror
+  check reads the conversation with `mirror recall`, which shows what was
+  logged as user messages. The test guide's route is the one walked.
