@@ -89,3 +89,14 @@ D11) builds the read Input 2 needs: `session.transcript`, a session's rows
 read from its file, the current view of a session no turn is running. TS1
 decides what a reconnected UI reads first, and US2 what a turn in flight
 adds. Inputs 1 and 3 are not US1's: they stay with US2 and TS1.
+
+US2 ([plan](cv1-ds2-us2-steering-follow-up-and-stop/plan.md),
+[D17](../../../decisions.md#d17--a-running-turn-takes-a-message-as-pi-does-and-stop-gives-back-what-it-queued))
+answers Input 3 for the desktop. Stop withdraws the queue before and
+after the abort and gives it back to the draft. A failed run continues
+with the queue, as Pi decides inside its run. A queue Pi still holds at a
+settle stays on screen. The queue dies with a lost host, and what it held
+goes back to the draft. It adopts Input 2's view without building it: the
+host keeps no queue of its own, so TS1 can rebuild a turn in flight from
+Pi's. Input 1, a send that carries an id, it leaves whole to TS1: nothing
+reconnects yet, and nothing queued survives a loss to be sent twice.

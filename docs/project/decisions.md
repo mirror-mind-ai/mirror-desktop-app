@@ -275,3 +275,34 @@ one; the tests over the `unsafe-answer` fixture are its net. The window
 itself does not yet refuse a navigation the transcript failed to prevent;
 that guard belongs to the Rust shell, and the
 [ledger](roadmap/technical-debt-ledger.md) carries it as TD-003.
+
+## D17 — A running turn takes a message as Pi does, and Stop gives back what it queued
+
+**Date:** 2026-11-05 · **Story:** [CV1.DS2.US2](roadmap/cv1-daily-use/cv1-ds2-sessions-and-live-control/cv1-ds2-us2-steering-follow-up-and-stop/index.md)
+
+While Pi answers, a message joins the turn the way Pi's own `prompt()`
+takes it, and the desktop adds no queue of its own. Enter sends it as a
+steer, delivered after the assistant's current turn and before its next
+request, and Option+Enter as a follow-up, delivered when the answer would
+otherwise end: terminal Pi's keys. The host answers with what Pi did,
+read from Pi's own preflight, as Pi's RPC mode does. It refuses in its
+own words what Pi could not start, since Pi's messages carry paths, and
+hands prompts to Pi one at a time per session. The screen lists what
+waits as Pi's queue says, and draws a message only when Pi delivers it,
+from Pi's echo, where Pi took it. A run that fails continues with the
+queue, as Pi decides inside its run.
+
+Stop withdraws Pi's queue before and after the abort, keeps out what Pi
+delivered meanwhile, and answers when the stopped run settles. What it
+withdrew goes back in the draft, before what was typed, by terminal Pi's
+merge, so nothing queued reaches the next turn unseen. Pi's bare `abort()`
+would have left the queue for that turn. The partial answer stays,
+marked "Stopped"; the session and its Mirror conversation stay open.
+
+Mirror sees a queued message as part of the run, as in terminal Pi: one
+Mirror turn, its prompt as typed and its whole reply, the steer and the
+follow-up not logged as prompts of their own. Logging them with their
+kind is a candidate for the core, not a prerequisite
+([predecessor](history/predecessor.md#core-owned-prerequisites)). TS1
+builds on this: a reconnected UI can rebuild a turn in flight from Pi's
+queue, since the host keeps none.

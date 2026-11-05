@@ -88,6 +88,12 @@ and release before the desktop consumes it.
 |---|---|---|---|
 | 1 | A package entry point for `mirror-mind` (`exports` → `./ts/src/index.ts`) | Today the public API is reachable only by path (`mirror-mind/ts/src/index.ts`); the host also needs a load hook because Node will not strip types under `node_modules` | open |
 | 2 | Export the read models the host deep-imports today: `resolveDbPath` (frontDoor/dbPath.ts), `listJourneyDtos` (mcp/readModels.ts), `getRuntimeSession` (mirror/runtimeSession.ts); then typed read models for what is still CLI-rendered only (journey status and stage, tasks, week, welcome card data) | The desktop renders screens from rows, not from terminal text; `packages/host/src/mirror.ts` is the one file reaching past `ts/src/index.ts` | open |
-| 3 | A per-session guard in the Pi logger extension instead of the process-wide `globalThis.__mirrorLoggerRegistered` | A host opens several sessions in one process; today every session after the first is silent unless the host clears the guard (spike 4) | open |
+| 3 | A per-session guard in the Pi logger extension instead of the process-wide `globalThis.__mirrorLoggerRegistered` | A host opens several sessions in one process; today every session after the first is silent unless the host clears the guard (spike 4) | superseded: Mirror 0.38.0 dedupes by event object instead; that guard misses `before_agent_start`, whose event Pi builds per handler, so two copies of Mirror both log a prompt ([CR003](../refinement/rs002-host-runtime/cr003-mirror-loads-twice-in-the-host-and-logs-every-prompt-twice.md)) |
 | 4 | Session-scoped operating-mode activation in `mirror mirror load` / `build load` when a session is named | Conversation binding is per session, mode activation is global; two open sessions report the last activation (the predecessor's CR094) | open |
 | 5 | An interface name at binding time (`mirror mirror load --interface …`, or a session registration that carries it) | A conversation bound before its first message is labeled `claude_code` | open |
+
+A candidate, not a prerequisite: logging a message queued into a running
+turn (a steer or a follow-up) as the person's, with its kind. Mirror's
+logger treats one as part of the run, so the course a turn took for it is
+not in Mirror's memory; terminal Pi has the same gap
+([D17](../decisions.md#d17--a-running-turn-takes-a-message-as-pi-does-and-stop-gives-back-what-it-queued)).

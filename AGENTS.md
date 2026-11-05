@@ -109,6 +109,13 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
   closes the one before (`packages/host/src/sessionPolicy.ts`), and the UI
   never asks for a close. A file the UI names is read or resumed only when
   it is one of the Journey's sessions (`sessionIndex.ts`, by realpath).
+- **A running turn takes a message as Pi does** (D17). The host keeps no
+  queue of its own: a steer or a follow-up goes to Pi's `prompt()`, the
+  answer is Pi's preflight, and the screen shows Pi's queue and draws a
+  message from Pi's echo. Stop withdraws Pi's queue on both sides of the
+  abort and gives it back to the draft (`packages/host/src/turnControl.ts`);
+  the running turn's rules in the UI are pure, in
+  `apps/desktop/src/conversations/liveTurn.ts`.
 - **TDD for behavior.** A feature or fix starts with a failing test; error
   paths carry the same burden as happy paths; `retry: 0`, a flaky test is
   fixed, never retried.
