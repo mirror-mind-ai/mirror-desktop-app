@@ -32,3 +32,5 @@ Request, with the test that pins it.
 - [CR002](cr002-after-a-node-upgrade-the-running-host-spawns-a-node-that-no-longer-exists.md) —
   After a Node upgrade, the running host spawns a Node that no longer exists,
   and binds no session.
+- [CR003](cr003-mirror-loads-twice-in-the-host-and-logs-every-prompt-twice.md) —
+  Mirror loads twice in the host, and logs every prompt twice.

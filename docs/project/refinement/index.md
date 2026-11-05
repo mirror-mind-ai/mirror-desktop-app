@@ -40,6 +40,7 @@ Open work is ordered intentionally. Terminal history follows open work.
 |------:|----|----|--------|--------|--------|----------|
 | 1 | [CR001](rs001-host-ui-contract/cr001-a-message-that-breaks-the-protocol-is-dropped-silently.md) | RS001 | A message that breaks the protocol is dropped silently, and the request behind it never settles | captured | — | — |
 | 2 | [CR002](rs002-host-runtime/cr002-after-a-node-upgrade-the-running-host-spawns-a-node-that-no-longer-exists.md) | RS002 | After a Node upgrade, the running host spawns a Node that no longer exists, and binds no session | captured | — | — |
+| 3 | [CR003](rs002-host-runtime/cr003-mirror-loads-twice-in-the-host-and-logs-every-prompt-twice.md) | RS002 | Mirror loads twice in the host, and logs every prompt twice | captured | — | — |
 
 ## Status Vocabulary
 
