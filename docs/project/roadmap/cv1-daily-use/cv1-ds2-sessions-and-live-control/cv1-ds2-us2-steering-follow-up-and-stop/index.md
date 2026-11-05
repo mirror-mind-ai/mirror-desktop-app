@@ -2,7 +2,7 @@
 
 # CV1.DS2.US2 — Steering, follow-up and stop
 
-**Status:** 🟡 Planned
+**Status:** ✅ Done — 2026-11-05
 **Type:** User Story
 
 ---
