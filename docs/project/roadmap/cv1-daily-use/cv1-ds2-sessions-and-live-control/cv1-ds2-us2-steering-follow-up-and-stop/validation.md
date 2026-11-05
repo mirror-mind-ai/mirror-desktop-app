@@ -2,7 +2,7 @@
 
 ## Status
 
-Blocked
+Passed
 
 ## Automated Checks
 
@@ -14,21 +14,21 @@ Checks status: passed
 
 Decision: required
 
-Evidence: Pending: one real turn through the host on a Journey the Navigator names, then the Navigator's 10-step route in the window with terminal Pi and mirror conversations as witnesses
+Evidence: Real turn on automation (2026-11-05): session bound to automation, 'prompt accepted (started)' with the first event 3.8 s after the prompt, pong answered, logged as 039b206b. Navigator walked the 11-step route in the window on automation with pi -r and mirror recall as witnesses: every check held
 
 ## Navigator Validation
 
-Route: test-guide.md, Navigator Validation: npm run dev; on a Journey the Navigator names (automation), send a multi-tool prompt, steer with Enter, follow up with Option+Enter, check pi -r and mirror conversations, stop a long answer with Escape and continue, stop with a queue and a draft, stop before the first word, stop during a slow tool, relaunch and read the stops back
+Route: test-guide.md, Navigator Validation: npm run dev; Automation, New session (Sonnet 5.5, thinking medium); a multi-tool prompt steered with Enter and followed up with Option+Enter; mirror recall of the conversation; stops by Escape mid-answer, with a queue and a draft, before the first word and during a slow tool; the app quit, the session read in pi -r, then read back in the relaunched app
 
-Navigator accepted: no
+Navigator accepted: yes
 
 Expected observation: A steer is listed then delivered between Pi's turns and drawn where Pi took it; a follow-up after the answer would have ended; a steered turn is one Mirror turn; Stop keeps the partial answer marked Stopped, puts queued messages back in the draft before the typed text, leaves the session and its Mirror conversation open, and nothing queued reaches the next turn; stops read back from the file marked where they were
 
-Pass condition: Every observation in the 10 steps holds
+Pass condition: Every check in the 11 steps holds
 
-Fail condition: Any observation fails; or a queued message reaches a later turn after a stop; or a stop ends or replaces the Mirror conversation; or a steered turn counts as more than one Mirror turn; or a steer or follow-up shows twice or not at all; or Enter while running leaves the draft; or Option+Enter inserts a line
+Fail condition: Any check fails; or a queued message reaches a later turn after a stop; or a stop ends or replaces the Mirror conversation; or the steer or follow-up is logged as its own Mirror user message; or a steer or follow-up shows twice or not at all; or Enter while running leaves the draft; or Option+Enter inserts a line
 
 ## Missing Evidence
 
-- Navigator validation has not been accepted
-<!-- ariad-seal sha256:20619de8617c02687bfb31df8f46dd93128f9a0db340254cd2f26a501a989fb5 — Ariad wrote this file and rewrites it only while this line matches the text above it. Edit the file and Ariad will leave it as it is. -->
+- none
+<!-- ariad-seal sha256:774daebc2f3d511881e086584f7e3555a6d8a47e4974f671fee60d0f5bd2023c — Ariad wrote this file and rewrites it only while this line matches the text above it. Edit the file and Ariad will leave it as it is. -->

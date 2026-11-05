@@ -167,4 +167,7 @@ today; US1's `83af4af9` and `ab43069c`, and US3's `7070fc32` before it),
 while a prompt sent from terminal Pi into the same conversation is logged
 once. Not this story's to fix; it goes to Debt Review as a Change Request.
 
-Pending: the Navigator's route.
+The Navigator's route, 2026-11-05: walked in the window on the automation
+Journey, a new session on Sonnet 5.5 at thinking medium, with `pi -r` and
+`mirror recall` as witnesses. Every check of the eleven steps held, and
+the Navigator accepted the validation.
