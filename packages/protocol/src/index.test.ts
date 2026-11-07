@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ClientRequest, HostEvent, HostMessage, HostResponse, PROTOCOL_VERSION } from "./index.ts";
+import { clampLevel, ClientRequest, HostEvent, HostMessage, HostResponse, PROTOCOL_VERSION, THINKING_LEVELS } from "./index.ts";
 
 describe("protocol", () => {
   it("accepts a hello request and its response round-trip", () => {
@@ -97,6 +97,7 @@ describe("session protocol", () => {
 
 describe("a Journey's sessions", () => {
   const file = "/Users/test/.pi/agent/sessions/--Users-test-garden--/2026-10-01T09-00-00-000Z_s1.jsonl";
+  const resumes = { model: { provider: "anthropic", id: "claude-test" }, thinkingLevel: "high" };
 
   it("lists a Journey's sessions by file, id, title and dates", () => {
     expect(ClientRequest.parse({ id: "r", request: { type: "sessions.list", journey: "garden" } }).request.type).toBe(
@@ -108,10 +109,22 @@ describe("a Journey's sessions", () => {
         type: "sessions.list",
         journey: "garden",
         sessions: [{ file, id: "s1", title: "Plant the tomatoes", created: 1, modified: 2 }],
+        defaults: { thinkingLevel: "medium" },
       },
     });
     expect(result.result?.type).toBe("sessions.list");
     expect(() => ClientRequest.parse({ id: "r", request: { type: "sessions.list" } })).toThrow();
+  });
+
+  it("says what a new session in the Journey starts with, its model absent when Pi will choose one", () => {
+    const list = (defaults: unknown) =>
+      HostResponse.parse({ id: "r", result: { type: "sessions.list", journey: "garden", sessions: [], defaults } });
+    expect(list({ model: { provider: "anthropic", id: "claude-test" }, thinkingLevel: "medium" }).result).toMatchObject({
+      defaults: { model: { provider: "anthropic", id: "claude-test" }, thinkingLevel: "medium" },
+    });
+    expect(list({ thinkingLevel: "medium" }).result).toMatchObject({ defaults: { thinkingLevel: "medium" } });
+    expect(() => list({ model: { provider: "anthropic", id: "claude-test" } })).toThrow();
+    expect(() => HostResponse.parse({ id: "r", result: { type: "sessions.list", journey: "garden", sessions: [] } })).toThrow();
   });
 
   it("reads one session's transcript for a Journey, and refuses a read without the Journey", () => {
@@ -127,6 +140,7 @@ describe("a Journey's sessions", () => {
       result: {
         type: "session.transcript",
         sessionFile: file,
+        resumes,
         earlier: 12,
         entries: [
           { kind: "user", text: "Plant the tomatoes" },
@@ -140,11 +154,22 @@ describe("a Journey's sessions", () => {
     });
     expect(result.result?.type).toBe("session.transcript");
     expect(() =>
-      HostResponse.parse({ id: "r", result: { type: "session.transcript", sessionFile: file, earlier: -1, entries: [] } }),
+      HostResponse.parse({ id: "r", result: { type: "session.transcript", sessionFile: file, earlier: -1, entries: [], resumes } }),
     ).toThrow();
     expect(() =>
-      HostResponse.parse({ id: "r", result: { type: "session.transcript", sessionFile: file, earlier: 0, entries: [{ kind: "system" }] } }),
+      HostResponse.parse({
+        id: "r",
+        result: { type: "session.transcript", sessionFile: file, earlier: 0, entries: [{ kind: "system" }], resumes },
+      }),
     ).toThrow();
+  });
+
+  it("says what resuming the session starts with, and requires it", () => {
+    const read = (extra: Record<string, unknown>) =>
+      HostResponse.parse({ id: "r", result: { type: "session.transcript", sessionFile: file, earlier: 0, entries: [], ...extra } });
+    expect(read({ resumes }).result).toMatchObject({ resumes });
+    expect(() => read({})).toThrow();
+    expect(() => read({ resumes: { model: { provider: "anthropic", id: "claude-test" }, thinkingLevel: "" } })).toThrow();
   });
 
   it("resumes a session file only for a Journey", () => {
@@ -188,6 +213,65 @@ describe("steering, following up and stopping", () => {
   it("names a prompt the host refused before Pi took it", () => {
     const refused = HostResponse.parse({ id: "r", error: { code: "prompt_refused", message: "No model is selected for this session." } });
     expect(refused.error?.code).toBe("prompt_refused");
+  });
+});
+
+describe("model and thinking", () => {
+  const model = { provider: "anthropic", id: "claude-test" };
+
+  it("lists each available model with the thinking levels Pi supports for it", () => {
+    const available = (models: unknown) => HostResponse.parse({ id: "r", result: { type: "models.available", models } });
+    const listed = { ...model, name: "Claude Test", reasoning: true, thinkingLevels: ["off", "low", "medium", "high"] };
+    expect(available([listed]).result).toMatchObject({ models: [listed] });
+    expect(() => available([{ ...model, name: "Claude Test", reasoning: true }])).toThrow();
+  });
+
+  it("opens a session on a model and its level together, or on neither", () => {
+    const open = (extra: Record<string, unknown>) =>
+      ClientRequest.parse({ id: "r", request: { type: "session.open", journey: "garden", ...extra } }).request;
+    expect(open({ model, thinkingLevel: "low" })).toMatchObject({ model, thinkingLevel: "low" });
+    expect(open({})).not.toHaveProperty("model");
+    expect(() => open({ model })).toThrow();
+    expect(() => open({ thinkingLevel: "low" })).toThrow();
+    expect(() => open({ model: { provider: "anthropic" }, thinkingLevel: "low" })).toThrow();
+  });
+
+  it("changes an open session's model, its level, or both, and answers what the session runs on after", () => {
+    const configure = (extra: Record<string, unknown>) =>
+      ClientRequest.parse({ id: "r", request: { type: "session.configure", sessionId: "s1", ...extra } }).request;
+    expect(configure({ model, thinkingLevel: "high" })).toMatchObject({ model, thinkingLevel: "high" });
+    expect(configure({ thinkingLevel: "high" })).toMatchObject({ thinkingLevel: "high" });
+    expect(configure({ model })).toMatchObject({ model });
+    // A change that changes nothing is no request.
+    expect(() => configure({})).toThrow();
+    expect(() => configure({ thinkingLevel: "" })).toThrow();
+
+    const answered = HostResponse.parse({ id: "r", result: { type: "session.configure", sessionId: "s1", model, thinkingLevel: "high" } });
+    expect(answered.result).toEqual({ type: "session.configure", sessionId: "s1", model, thinkingLevel: "high" });
+    expect(() => HostResponse.parse({ id: "r", result: { type: "session.configure", sessionId: "s1", model } })).toThrow();
+  });
+
+  it("names a model Pi cannot use", () => {
+    const refused = HostResponse.parse({ id: "r", error: { code: "model_not_available", message: "No credential for anthropic: sign in first." } });
+    expect(refused.error?.code).toBe("model_not_available");
+  });
+
+  it("keeps Pi's thinking levels in Pi's order", () => {
+    expect(THINKING_LEVELS).toEqual(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+  });
+
+  it("clamps a level as Pi does: kept when supported, else the nearest up, else the nearest down", () => {
+    const lowToMax = ["low", "medium", "high", "xhigh", "max"];
+    const offToHigh = ["off", "minimal", "low", "medium", "high"];
+    expect(clampLevel("medium", lowToMax)).toBe("medium");
+    expect(clampLevel("off", lowToMax)).toBe("low");
+    expect(clampLevel("minimal", lowToMax)).toBe("low");
+    expect(clampLevel("max", offToHigh)).toBe("high");
+    expect(clampLevel("xhigh", ["off", "low", "max"])).toBe("max");
+    expect(clampLevel("high", ["off"])).toBe("off");
+    // A level Pi does not know takes the lowest the model supports, as Pi's clamp does.
+    expect(clampLevel("turbo", lowToMax)).toBe("low");
+    expect(clampLevel("high", [])).toBe("off");
   });
 });
 

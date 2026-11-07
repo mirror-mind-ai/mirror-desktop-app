@@ -5,7 +5,13 @@
 // the session and the host, and reports how long each stage took:
 //
 //   npm run turn --workspace packages/host -- [--cwd <dir>] [--prompt "<text>"]
+//                                            [--model <provider/id> --thinking <level>]
 //                                            [--node <binary>] [--entry <main.ts>]
+//
+// `--model` and `--thinking` open the session on a choice, as the first send
+// does when the person picked one (CV1.DS2.US3), always together; after the
+// turn the script reads the session file's last model and level, the record
+// `pi -r` resumes from.
 //
 // `--node` and `--entry` point it at another runtime and host — the embedded
 // sidecar and the staged host inside a bundle — so a bundle can be driven
@@ -16,6 +22,7 @@
 
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -35,6 +42,21 @@ const option = (name: string): string | undefined => {
 const journey = option("--journey");
 const cwd = option("--cwd") ?? (journey ? undefined : process.cwd());
 const promptText = option("--prompt") ?? "Reply with the single word: pong";
+const chosenModel = option("--model");
+const chosenLevel = option("--thinking");
+if ((chosenModel === undefined) !== (chosenLevel === undefined)) {
+  process.stderr.write("turn: --model and --thinking go together, as the app sends them\n");
+  process.exit(2);
+}
+const slash = chosenModel?.indexOf("/") ?? -1;
+if (chosenModel !== undefined && slash <= 0) {
+  process.stderr.write("turn: --model takes provider/id\n");
+  process.exit(2);
+}
+const choice =
+  chosenModel !== undefined && chosenLevel !== undefined
+    ? { model: { provider: chosenModel.slice(0, slash), id: chosenModel.slice(slash + 1) }, thinkingLevel: chosenLevel }
+    : {};
 
 const HOST_ENTRY = option("--entry") ?? fileURLToPath(new URL("../src/main.ts", import.meta.url));
 const NODE = option("--node") ?? process.execPath;
@@ -94,7 +116,7 @@ const hello = await request({ type: "hello", token, protocolVersion: PROTOCOL_VE
 console.log(`${since()}  hello: node ${hello.host.node}, pi ${hello.host.pi}, mirror ${hello.host.mirror}`);
 
 const opened = await request(
-  { type: "session.open", ...(journey ? { journey } : {}), ...(cwd ? { cwd } : {}) },
+  { type: "session.open", ...(journey ? { journey } : {}), ...(cwd ? { cwd } : {}), ...choice },
   "session.open",
 );
 console.log(
@@ -159,5 +181,19 @@ console.log(`           turn took ${(performance.now() - promptSentAt).toFixed(0
 
 await request({ type: "session.close", sessionId: opened.sessionId }, "session.close");
 console.log(`${since()}  session closed`);
+console.log(`           the file records: ${recordedChoice(opened.sessionFile)}`);
 socket.close();
 host.stdin.end();
+
+/** The session file's last model and level: what `pi -r` resumes the session on. */
+function recordedChoice(file: string): string {
+  let model = "(none)";
+  let level = "(none)";
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    const entry = JSON.parse(line) as { type?: string; provider?: string; modelId?: string; thinkingLevel?: string };
+    if (entry.type === "model_change") model = `${entry.provider}/${entry.modelId}`;
+    if (entry.type === "thinking_level_change") level = entry.thinkingLevel ?? level;
+  }
+  return `${model}, thinking ${level}`;
+}

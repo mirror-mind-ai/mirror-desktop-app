@@ -705,12 +705,18 @@ describe("a Journey's sessions", () => {
       switch (body.type) {
         case "sessions.list":
           if (options.failList?.()) throw new HostRequestError("sessions_unreadable", "The session folder could not be read: permission denied.");
-          return { type: "sessions.list", journey: body.journey, sessions: options.sessions ?? [tomatoes, roses] };
+          return { type: "sessions.list", journey: body.journey, sessions: options.sessions ?? [tomatoes, roses], defaults: { model: { provider: "anthropic", id: "claude-test" }, thinkingLevel: "medium" } };
         case "session.transcript": {
           await options.hold?.(body.sessionFile);
           if (options.failRead?.()) throw new HostRequestError("sessions_unreadable", "This session could not be read: its file is not a Pi session Pi can load.");
           const listed = (options.sessions ?? [tomatoes, roses]).find((session) => session.file === body.sessionFile);
-          return { type: "session.transcript", sessionFile: body.sessionFile, entries: said(listed?.title ?? "?"), earlier: 0 };
+          return {
+            type: "session.transcript",
+            sessionFile: body.sessionFile,
+            entries: said(listed?.title ?? "?"),
+            earlier: 0,
+            resumes: { model: { provider: "anthropic", id: "claude-test" }, thinkingLevel: "medium" },
+          };
         }
         case "session.open":
           opens += 1;

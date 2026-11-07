@@ -14,6 +14,7 @@
     "login": "node scripts/login.ts"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "1.4.0",
     "@earendil-works/pi-coding-agent": "1.4.0",
     "@mirror-desktop/protocol": "*",
     "mirror-mind": "0.38.0",

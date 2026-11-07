@@ -9,7 +9,26 @@ import type { AvailableModel, Journey, SessionEvent } from "@mirror-desktop/prot
 
 import type { ScriptedSession } from "./fakeHost.ts";
 
-export const model: AvailableModel = { provider: "anthropic", id: "claude-test", name: "Claude Test", reasoning: true };
+/** Off to high, as most models; the world's first, so Pi's default where the world names none. */
+export const model: AvailableModel = {
+  provider: "anthropic",
+  id: "claude-test",
+  name: "Claude Test",
+  reasoning: true,
+  thinkingLevels: ["off", "minimal", "low", "medium", "high"],
+};
+
+/** Low to max, with no off and no minimal, as some models have. */
+export const deepModel: AvailableModel = {
+  provider: "anthropic",
+  id: "claude-deep",
+  name: "Claude Deep",
+  reasoning: true,
+  thinkingLevels: ["low", "medium", "high", "xhigh", "max"],
+};
+
+/** A model that does not reason: its only level is off. */
+export const plainModel: AvailableModel = { provider: "anthropic", id: "claude-plain", name: "Claude Plain", reasoning: false, thinkingLevels: ["off"] };
 
 export const garden: Journey = {
   id: "garden",

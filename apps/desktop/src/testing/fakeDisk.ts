@@ -11,10 +11,15 @@
 // session can be read back as the real host reads a file: a turn stopped
 // halfway is written as far as it went, with the messages delivered into it.
 //
+// A session also keeps the model and thinking level it runs on, as Pi's file
+// records them (CV1.DS2.US3): a new session from what it started on, any
+// session from each change made to it, so a session read back says what
+// resuming it starts with.
+//
 // The fake host owns everything else: which sessions are open, which Journey
 // they belong to, and the rules of opening one (fakeHost.ts).
 
-import { type SessionEvent, SessionSummary, TranscriptEntry } from "@mirror-desktop/protocol";
+import { type ModelAndLevel, ModelRef, type SessionEvent, SessionSummary, TranscriptEntry } from "@mirror-desktop/protocol";
 
 import { contentProblem } from "./turns.ts";
 
@@ -28,6 +33,10 @@ export interface ScriptedSession {
   readonly entries: readonly TranscriptEntry[];
   /** The messages before the first entry, which the real host's bound leaves out. */
   readonly earlier?: number;
+  /** The model the file last records; none when it records none. */
+  readonly model?: ModelRef | undefined;
+  /** The level the file last records; none when it records none. */
+  readonly thinkingLevel?: string | undefined;
 }
 
 /** A session as a read finds it: what session.open resumes and session.transcript answers. */
@@ -36,6 +45,8 @@ export interface ReadSession {
   readonly id: string;
   readonly entries: readonly TranscriptEntry[];
   readonly earlier: number;
+  readonly model?: ModelRef | undefined;
+  readonly thinkingLevel?: string | undefined;
 }
 
 /** A session on disk: scripted, or created by an open and listed once prompted. */
@@ -48,6 +59,8 @@ interface DiskSession {
   entries: TranscriptEntry[];
   earlier: number;
   listed: boolean;
+  model?: ModelRef | undefined;
+  thinkingLevel?: string | undefined;
 }
 
 type Issue = { path: PropertyKey[]; message: string } | undefined;
@@ -70,6 +83,13 @@ export function checkSessions(
       const where = `sessions.${journey}[${index}]`;
       const summary = SessionSummary.safeParse(session);
       if (!summary.success) throw fail(where, summary.error.issues[0]);
+      if (session.model !== undefined) {
+        const model = ModelRef.safeParse(session.model);
+        if (!model.success) throw fail(`${where}.model`, model.error.issues[0]);
+      }
+      if (session.thinkingLevel !== undefined && session.thinkingLevel === "") {
+        throw fail(`${where}.thinkingLevel`, { path: [], message: "a level is never empty" });
+      }
       session.entries.forEach((entry, at) => {
         const parsed = TranscriptEntry.safeParse(entry);
         if (!parsed.success) throw fail(`${where}.entries[${at}]`, parsed.error.issues[0]);
@@ -106,9 +126,15 @@ export class FakeDisk {
     return this.#of(journey).find((session) => session.listed && session.file === file);
   }
 
-  /** A new session's file, made by an open. Not listed until its first prompt. */
-  create(journey: string, id: string, file: string): void {
-    this.#of(journey).push({ file, id, title: "", created: 0, modified: 0, entries: [], earlier: 0, listed: false });
+  /** A new session's file, made by an open, recording what it started on. Not listed until its first prompt. */
+  create(journey: string, id: string, file: string, startedOn: ModelAndLevel): void {
+    this.#of(journey).push({ file, id, title: "", created: 0, modified: 0, entries: [], earlier: 0, listed: false, ...recorded(startedOn) });
+  }
+
+  /** A change of the model or the level of the Journey's session at `file`, recorded as Pi records it. */
+  configured(journey: string, file: string, runsOn: ModelAndLevel): void {
+    const session = this.#find(journey, file);
+    if (session) Object.assign(session, recorded(runsOn));
   }
 
   /**
@@ -145,6 +171,11 @@ export class FakeDisk {
     }
     return sessions;
   }
+}
+
+/** What the file records of a model and a level: the model only when there is one. */
+function recorded(runsOn: ModelAndLevel): { model?: ModelRef; thinkingLevel: string } {
+  return { ...(runsOn.model ? { model: runsOn.model } : {}), thinkingLevel: runsOn.thinkingLevel };
 }
 
 /**

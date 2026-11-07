@@ -2,7 +2,7 @@ import type { SessionEvent } from "@mirror-desktop/protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import { SessionBusyError } from "./sessionPolicy.ts";
-import { type Acceptance, acceptPrompt, type PromptTarget, PromptRefusedError, stopTurn, type StopTarget } from "./turnControl.ts";
+import { type Acceptance, acceptPrompt, inOrder, type PromptTarget, PromptRefusedError, stopTurn, type StopTarget } from "./turnControl.ts";
 
 type PiPrompt = PromptTarget["prompt"];
 
@@ -230,5 +230,39 @@ describe("stopping a turn", () => {
     stub.failAbort(new Error("Pi could not stop"));
     await expect(stopping).rejects.toThrow("Pi could not stop");
     expect(stub.listeners.size).toBe(0);
+  });
+});
+
+describe("one session's prompts and changes, in the order they came", () => {
+  it("hands Pi a change sent before a prompt before that prompt, so the prompt runs on it", async () => {
+    const order: string[] = [];
+    const line = { tail: Promise.resolve() as Promise<unknown> };
+    let finishCheck: () => void = () => {};
+    // A change waits on Pi's credential check before it applies anything.
+    const change = inOrder(line, async () => {
+      await new Promise<void>((resolve) => (finishCheck = resolve));
+      order.push("model changed");
+      return "changed";
+    });
+    const prompt = inOrder(line, async () => {
+      order.push("prompt");
+      return "started";
+    });
+    await Promise.resolve();
+    expect(order).toEqual([]);
+    finishCheck();
+    await expect(change).resolves.toBe("changed");
+    await expect(prompt).resolves.toBe("started");
+    expect(order).toEqual(["model changed", "prompt"]);
+  });
+
+  it("keeps a refused change to its sender: the next prompt still goes", async () => {
+    const line = { tail: Promise.resolve() as Promise<unknown> };
+    const change = inOrder(line, async () => {
+      throw new Error("No credential for faraway: sign in first.");
+    });
+    const prompt = inOrder(line, async () => "started");
+    await expect(change).rejects.toThrow("No credential for faraway");
+    await expect(prompt).resolves.toBe("started");
   });
 });

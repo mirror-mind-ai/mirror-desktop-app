@@ -33,7 +33,10 @@ function stubHost(answers: Partial<Record<ClientRequestBody["type"], () => Promi
 
 const healthy = () =>
   stubHost({
-    "models.available": async () => ({ type: "models.available", models: [{ provider: "anthropic", id: "claude-test", name: "Claude Test", reasoning: true }] }),
+    "models.available": async () => ({
+      type: "models.available",
+      models: [{ provider: "anthropic", id: "claude-test", name: "Claude Test", reasoning: true, thinkingLevels: ["off", "minimal", "low", "medium", "high"] }],
+    }),
     "journeys.list": async () => ({ type: "journeys.list", journeys: [] }),
   });
 

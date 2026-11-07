@@ -56,10 +56,23 @@
 // a Journey has one open session, and opening another closes it
 // (`closedSessions` says which), or is refused while it answers; and a file is
 // open once.
+//
+// A session runs on a model and a thinking level (CV1.DS2.US3), which the
+// fake host keeps by the real host's rules (packages/host/src/modelChoice.ts):
+// the world's models are the ones Pi can use; a new session starts on the
+// Journey's `defaults` (the world's, else its first model at medium), a file
+// resumes on its own model and level, else on the defaults, and on the
+// default model with Pi's line when the world does not list its own; a choice
+// comes with the open or with `session.configure`, a model the world does
+// not list is refused, and the disk records each. The UI offers only a
+// model's own levels and sends a model and its level together, so a request
+// that does otherwise is recorded. A `session.configure` can be held, as an
+// open can.
 
 import {
   AuthProvider,
   AvailableModel,
+  clampLevel,
   ClientRequest,
   type ClientRequestBody,
   HostError,
@@ -67,6 +80,8 @@ import {
   HostIdentity,
   HostMessage,
   Journey,
+  ModelAndLevel,
+  type ModelRef,
   PROTOCOL_VERSION,
   type SessionEvent,
 } from "@mirror-desktop/protocol";
@@ -74,7 +89,7 @@ import {
 import { listen, type ServerSide, type SocketPeer, type SocketServer, stopListening } from "./fakeSocket.ts";
 import { scriptIpc } from "./ipcDoor.ts";
 import { log } from "./traffic.ts";
-import { checkSessions, FakeDisk, type ScriptedSession } from "./fakeDisk.ts";
+import { checkSessions, FakeDisk, type ReadSession, type ScriptedSession } from "./fakeDisk.ts";
 import { contentProblem, parseTurn } from "./turns.ts";
 import { record } from "./violations.ts";
 
@@ -104,7 +119,7 @@ export type ScriptedFailure =
   | { readonly request: JourneyRequest; readonly journey: string; readonly error: HostError };
 
 /** The requests made for one Journey, whose failures are scripted per Journey. */
-type JourneyRequest = "session.open" | "sessions.list" | "session.transcript" | "session.prompt";
+type JourneyRequest = "session.open" | "sessions.list" | "session.transcript" | "session.prompt" | "session.configure";
 
 export type { ScriptedSession };
 
@@ -125,6 +140,10 @@ export interface World {
   readonly sessionCwds?: Readonly<Record<string, string>>;
   /** Each Journey's sessions on disk, in any order; a Journey with none lists none. */
   readonly sessions?: Readonly<Record<string, readonly ScriptedSession[]>>;
+  /** What a new session in a Journey starts with, from Pi's settings; else the world's first model at medium. */
+  readonly defaults?: Readonly<Record<string, ModelAndLevel>>;
+  /** Journeys whose first session.configure is answered only when the test releases it. */
+  readonly heldConfigures?: readonly string[];
 }
 
 /** A turn whose events wait for the test. */
@@ -136,12 +155,62 @@ export interface HeldTurn {
   releaseThrough(match: (event: SessionEvent) => boolean): void;
 }
 
-/** A session.open whose answer waits for the test. */
+/** A session.open or a session.configure whose answer waits for the test. */
 export interface HeldOpen {
   release(): void;
 }
 
+/** The first answer of one request per Journey, scripted to wait for the test. */
+class HeldAnswers {
+  readonly #request: string;
+  /** Per Journey: "waiting" for the request, the answer "held", or "released". */
+  readonly #state = new Map<string, "waiting" | { readonly send: () => void } | "released">();
+
+  constructor(request: string, journeys: readonly string[] = []) {
+    this.#request = request;
+    for (const journey of journeys) this.#state.set(journey, "waiting");
+  }
+
+  /** Hold `send` when the Journey's answer is scripted to wait; false when it is not. */
+  held(journey: string, send: () => void): boolean {
+    if (this.#state.get(journey) !== "waiting") return false;
+    this.#state.set(journey, { send });
+    return true;
+  }
+
+  /** The held answer of `journey`, once the UI has asked. */
+  of(journey: string): HeldOpen {
+    const held = this.#state.get(journey);
+    if (held === undefined || typeof held === "string") throw new Error(`No ${this.#request} for ${journey} is held: send in it first.`);
+    return {
+      release: () => {
+        this.#state.set(journey, "released");
+        held.send();
+      },
+    };
+  }
+
+  /** The host went away: an answer it held can no longer be sent, and is not reported. */
+  settle(): void {
+    for (const [journey, held] of this.#state) {
+      if (held !== "waiting" && held !== "released") this.#state.set(journey, "released");
+    }
+  }
+
+  /** What was scripted to wait and never asked for, or held and never released. */
+  unused(): string[] {
+    return [...this.#state].flatMap(([journey, held]) =>
+      held === "waiting"
+        ? [`the ${this.#request} scripted to be held for ${journey} was never sent`]
+        : held === "released"
+          ? []
+          : [`the ${this.#request} held for ${journey} was never released`],
+    );
+  }
+}
+
 type SessionOpen = Extract<ClientRequestBody, { type: "session.open" }>;
+type SessionConfigure = Extract<ClientRequestBody, { type: "session.configure" }>;
 type SessionPrompt = Extract<ClientRequestBody, { type: "session.prompt" }>;
 type SessionsList = Extract<ClientRequestBody, { type: "sessions.list" }>;
 type SessionTranscript = Extract<ClientRequestBody, { type: "session.transcript" }>;
@@ -229,10 +298,15 @@ function checkWorld(world: World): HostIdentity {
       throw new Error(`The fake host's world: failures[${index}] fails ${failure.request} for "${failure.journey}", a Journey the world does not have`);
     }
   });
-  for (const id of world.heldOpens ?? []) {
-    if (!journeyOf(id)?.projectPath) {
-      throw new Error(`The fake host's world: heldOpens holds "${id}", a Journey with no project path`);
+  for (const [field, ids] of [["heldOpens", world.heldOpens], ["heldConfigures", world.heldConfigures]] as const) {
+    for (const id of ids ?? []) {
+      if (!journeyOf(id)?.projectPath) throw new Error(`The fake host's world: ${field} holds "${id}", a Journey with no project path`);
     }
+  }
+  for (const [id, defaults] of Object.entries(world.defaults ?? {})) {
+    if (!journeyOf(id)) throw new Error(`The fake host's world: defaults names "${id}", a Journey the world does not have`);
+    const parsed = ModelAndLevel.safeParse(defaults);
+    if (!parsed.success) throw fail(`defaults.${id}`, parsed.error.issues[0]);
   }
   for (const id of Object.keys(world.sessionCwds ?? {})) {
     if (!journeyOf(id)) throw new Error(`The fake host's world: sessionCwds names "${id}", a Journey the world does not have`);
@@ -361,14 +435,14 @@ export class FakeHost implements SocketServer {
   /** The sessions a later session.open for their Journey closed, in order. */
   readonly closedSessions: string[] = [];
   readonly #connections = new Set<Connection>();
-  /** The open sessions, by id: their Journey and their file. */
-  readonly #sessions = new Map<string, { readonly journey: string; readonly file: string }>();
+  /** The open sessions, by id: their Journey, their file, and what they run on. */
+  readonly #sessions = new Map<string, { readonly journey: string; readonly file: string; runsOn: ModelAndLevel }>();
   readonly #disk: FakeDisk;
   #newSessions = 0;
   #opens = 0;
   readonly #failures: { readonly failure: ScriptedFailure; answered: boolean; failing: boolean }[];
-  /** Per Journey scripted to hold its open: "waiting" for it, the reply "held", or "released". */
-  readonly #heldOpens = new Map<string, "waiting" | { readonly send: () => void } | "released">();
+  readonly #heldOpens: HeldAnswers;
+  readonly #heldConfigures: HeldAnswers;
   #held: { readonly turn: Held; readonly playing: Playing } | null = null;
   /** Each open session's queue, as Pi keeps it: steering first. */
   readonly #queues = new Map<string, { steering: string[]; followUp: string[] }>();
@@ -379,7 +453,8 @@ export class FakeHost implements SocketServer {
     this.#world = world;
     this.#turns = world.turns.map((turn) => ({ turn, played: false }));
     this.#failures = (world.failures ?? []).map((failure) => ({ failure, answered: false, failing: true }));
-    for (const journey of world.heldOpens ?? []) this.#heldOpens.set(journey, "waiting");
+    this.#heldOpens = new HeldAnswers("session.open", world.heldOpens);
+    this.#heldConfigures = new HeldAnswers("session.configure", world.heldConfigures);
     this.#disk = new FakeDisk(world.sessions);
   }
 
@@ -395,16 +470,12 @@ export class FakeHost implements SocketServer {
 
   /** The held session.open of `journey`, once the UI has sent it. */
   heldOpen(journey: string): HeldOpen {
-    const held = this.#heldOpens.get(journey);
-    if (held === undefined || typeof held === "string") {
-      throw new Error(`No session.open for ${journey} is held: send in it first.`);
-    }
-    return {
-      release: () => {
-        this.#heldOpens.set(journey, "released");
-        held.send();
-      },
-    };
+    return this.#heldOpens.of(journey);
+  }
+
+  /** The held session.configure of `journey`, once the UI has sent it. */
+  heldConfigure(journey: string): HeldOpen {
+    return this.#heldConfigures.of(journey);
   }
 
   /** The host process died: every connection dropped as a killed process drops it, and the port dead from now on. */
@@ -413,9 +484,8 @@ export class FakeHost implements SocketServer {
     stopListening(`ws://127.0.0.1:${this.endpoint.port}`);
     for (const connection of this.#connections) connection.side.drop();
     this.#connections.clear();
-    for (const [journey, held] of this.#heldOpens) {
-      if (held !== "waiting" && held !== "released") this.#heldOpens.set(journey, "released");
-    }
+    this.#heldOpens.settle();
+    this.#heldConfigures.settle();
   }
 
   /** The person fixed what made `request` fail (for `journey`, for a session.open): answer it normally from now on. */
@@ -435,10 +505,7 @@ export class FakeHost implements SocketServer {
     for (const { failure, answered } of this.#failures) {
       if (!answered) record("unscripted", `the failure scripted for ${describeFailure(failure)} was never answered`);
     }
-    for (const [journey, held] of this.#heldOpens) {
-      if (held === "waiting") record("unscripted", `the session.open scripted to be held for ${journey} was never sent`);
-      else if (held !== "released") record("unscripted", `the session.open held for ${journey} was never released`);
-    }
+    for (const detail of [...this.#heldOpens.unused(), ...this.#heldConfigures.unused()]) record("unscripted", detail);
   }
 
   accept(side: ServerSide): SocketPeer {
@@ -538,6 +605,9 @@ export class FakeHost implements SocketServer {
       case "session.prompt":
         this.#prompt(connection, id, request);
         return;
+      case "session.configure":
+        this.#configure(connection, id, request);
+        return;
       default:
         this.#unscripted(connection, id, `${request.type}, which the fake host was not scripted to answer`);
     }
@@ -567,6 +637,16 @@ export class FakeHost implements SocketServer {
       this.#notTheJourneys(connection, id, `session.open of ${request.sessionFile}`, journey.id);
       return;
     }
+    // The person's choice, refused as the real host refuses it, before anything closes.
+    let chosen: ModelAndLevel | undefined;
+    if (request.model !== undefined && request.thinkingLevel !== undefined) {
+      const listed = this.#listedModel(request.model);
+      if (!listed) {
+        this.#error(connection, id, "model_not_available", `Pi knows no model ${request.model.provider}/${request.model.id}.`);
+        return;
+      }
+      chosen = { model: request.model, thinkingLevel: this.#levelOf("session.open", listed, request.thinkingLevel) };
+    }
     // As the real host keeps one open session per Journey (sessionPolicy.ts).
     const previous = [...this.#sessions].filter(([, open]) => open.journey === journey.id).map(([sessionId]) => sessionId);
     if (previous.some((sessionId) => this.#answering(sessionId))) {
@@ -585,10 +665,15 @@ export class FakeHost implements SocketServer {
     }
     const sessionId = resumed ? resumed.id : `session-${++this.#newSessions}`;
     const sessionFile = resumed ? resumed.file : `/Users/test/.pi/agent/sessions/${sessionId}.jsonl`;
-    if (!resumed) this.#disk.create(journey.id, sessionId, sessionFile);
-    this.#sessions.set(sessionId, { journey: journey.id, file: sessionFile });
+    // A new session starts on the choice or the defaults; a resumed one on its
+    // own, then on the choice, which its file records; Pi says where it fell back.
+    const resumes = resumed ? this.#resumeOf(journey.id, resumed) : undefined;
+    const runsOn = chosen ?? resumes?.runsOn ?? this.#defaultsOf(journey.id);
+    const diagnostics = !chosen && resumes?.fallback ? [resumes.fallback] : [];
+    if (!resumed) this.#disk.create(journey.id, sessionId, sessionFile, runsOn);
+    else if (chosen) this.#disk.configured(journey.id, sessionFile, chosen);
+    this.#sessions.set(sessionId, { journey: journey.id, file: sessionFile, runsOn });
     const number = ++this.#opens;
-    const model = this.#world.models[0];
     const cwd = request.cwd ?? this.#world.sessionCwds?.[journey.id] ?? journey.projectPath;
     const answer = () =>
       this.#reply(connection, {
@@ -600,17 +685,90 @@ export class FakeHost implements SocketServer {
           cwd,
           journey: journey.id,
           mirrorConversationId: `conversation-${number}`,
-          ...(model ? { model: { provider: model.provider, id: model.id } } : {}),
-          thinkingLevel: "medium",
-          diagnostics: [],
+          ...runsOn,
+          diagnostics,
         },
       });
-    if (this.#heldOpens.get(journey.id) === "waiting") {
+    if (this.#heldOpens.held(journey.id, answer)) {
       log(`#${connection.side.id} session.open for ${journey.id} held`);
-      this.#heldOpens.set(journey.id, { send: answer });
       return;
     }
     answer();
+  }
+
+  /** Change an open session's model and level as the real host does, answering what it runs on after. */
+  #configure(connection: Connection, id: string, request: SessionConfigure): void {
+    const open = this.#sessions.get(request.sessionId);
+    if (!open) {
+      this.#unscripted(connection, id, `session.configure for ${request.sessionId}, a session the fake host never opened`);
+      return;
+    }
+    const failure = this.#failing("session.configure", open.journey);
+    if (failure) {
+      this.#error(connection, id, failure.code, failure.message);
+      return;
+    }
+    if (request.model === undefined) record("unscripted", "session.configure without a model: the UI sends the model and its level together");
+    if (request.thinkingLevel === undefined) record("unscripted", "session.configure without a level: the UI sends the model and its level together");
+    const model = request.model ?? open.runsOn.model;
+    const listed = model ? this.#listedModel(model) : undefined;
+    if (request.model !== undefined && !listed) {
+      this.#error(connection, id, "model_not_available", `Pi knows no model ${request.model.provider}/${request.model.id}.`);
+      return;
+    }
+    const level = request.thinkingLevel ?? open.runsOn.thinkingLevel;
+    open.runsOn = { ...(model ? { model } : {}), thinkingLevel: listed ? this.#levelOf("session.configure", listed, level) : level };
+    this.#disk.configured(open.journey, open.file, open.runsOn);
+    const runsOn = open.runsOn;
+    const answer = () => this.#reply(connection, { id, result: { type: "session.configure", sessionId: request.sessionId, ...runsOn } });
+    if (this.#heldConfigures.held(open.journey, answer)) {
+      log(`#${connection.side.id} session.configure for ${open.journey} held`);
+      return;
+    }
+    answer();
+  }
+
+  /** What a new session in `journey` starts with: the world's defaults, else its first model at medium. */
+  #defaultsOf(journey: string): ModelAndLevel {
+    const scripted = this.#world.defaults?.[journey];
+    if (scripted) return scripted;
+    const first = this.#world.models[0];
+    return first ? { model: { provider: first.provider, id: first.id }, thinkingLevel: clampLevel("medium", first.thinkingLevels) } : { thinkingLevel: "medium" };
+  }
+
+  /** The world's model for `ref`: one Pi can use. */
+  #listedModel(ref: ModelRef): AvailableModel | undefined {
+    return this.#world.models.find((model) => model.provider === ref.provider && model.id === ref.id);
+  }
+
+  /**
+   * What resuming `session` starts with, by the real host's rule: its own
+   * model when Pi can use it, else the default one, with Pi's line saying
+   * so; its own level, else the default level; clamped to the model.
+   */
+  #resumeOf(journey: string, session: ReadSession): { runsOn: ModelAndLevel; fallback?: string } {
+    const defaults = this.#defaultsOf(journey);
+    const own = session.model ? this.#listedModel(session.model) : undefined;
+    const model = own ? session.model : defaults.model;
+    const listed = model ? this.#listedModel(model) : undefined;
+    const level = session.thinkingLevel ?? defaults.thinkingLevel;
+    const runsOn = { ...(model ? { model } : {}), thinkingLevel: listed ? clampLevel(level, listed.thinkingLevels) : level };
+    const fallback =
+      session.model && !own && defaults.model
+        ? `Could not restore model ${session.model.provider}/${session.model.id}. Using ${defaults.model.provider}/${defaults.model.id}`
+        : undefined;
+    return { runsOn, ...(fallback ? { fallback } : {}) };
+  }
+
+  /** The level `request` asked of `model`, clamped as Pi clamps it; one the model does not list is the UI's mistake, recorded. */
+  #levelOf(request: string, model: AvailableModel, level: string): string {
+    if (!model.thinkingLevels.includes(level)) {
+      record(
+        "unscripted",
+        `${request} asked ${level} of ${model.provider}/${model.id}, which lists ${model.thinkingLevels.join(", ")}: the UI offers only a model's own levels`,
+      );
+    }
+    return clampLevel(level, model.thinkingLevels);
   }
 
   #list(connection: Connection, id: string, request: SessionsList): void {
@@ -621,7 +779,7 @@ export class FakeHost implements SocketServer {
       this.#error(connection, id, failure.code, failure.message);
       return;
     }
-    this.#reply(connection, { id, result: { type: "sessions.list", journey, sessions: this.#disk.list(journey) } });
+    this.#reply(connection, { id, result: { type: "sessions.list", journey, sessions: this.#disk.list(journey), defaults: this.#defaultsOf(journey) } });
   }
 
   #transcript(connection: Connection, id: string, request: SessionTranscript): void {
@@ -639,7 +797,13 @@ export class FakeHost implements SocketServer {
     }
     this.#reply(connection, {
       id,
-      result: { type: "session.transcript", sessionFile: session.file, entries: [...session.entries], earlier: session.earlier },
+      result: {
+        type: "session.transcript",
+        sessionFile: session.file,
+        entries: [...session.entries],
+        earlier: session.earlier,
+        resumes: this.#resumeOf(journey, session).runsOn,
+      },
     });
   }
 

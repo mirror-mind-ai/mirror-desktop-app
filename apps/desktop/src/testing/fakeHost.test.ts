@@ -20,7 +20,7 @@ const answer = (prompt: string): SessionEvent[] => [
 ];
 
 const world = (overrides: Partial<World> = {}): World => ({
-  models: [{ provider: "anthropic", id: "claude-test", name: "Claude Test", reasoning: true }],
+  models: [{ provider: "anthropic", id: "claude-test", name: "Claude Test", reasoning: true, thinkingLevels: ["off", "minimal", "low", "medium", "high"] }],
   journeys: [
     { id: "garden", name: "Garden", status: "active", description: "Tending things", projectPath: "/Users/test/garden" },
     { id: "attic", name: "Attic", status: "active", description: "No project yet" },
@@ -694,12 +694,14 @@ describe("the fake host's sessions on disk", () => {
     );
     const { client } = await connected(host.endpoint);
 
+    const defaults = { model: { provider: "anthropic", id: "claude-test" }, thinkingLevel: "medium" };
     await expect(client.request({ type: "sessions.list", journey: "garden" })).resolves.toEqual({
       type: "sessions.list",
       journey: "garden",
       sessions: [summary(tomatoes), summary(roses)],
+      defaults,
     });
-    await expect(client.request({ type: "sessions.list", journey: "beds" })).resolves.toEqual({ type: "sessions.list", journey: "beds", sessions: [] });
+    await expect(client.request({ type: "sessions.list", journey: "beds" })).resolves.toEqual({ type: "sessions.list", journey: "beds", sessions: [], defaults });
   });
 
   it("reads a session's transcript, and refuses a file that is not one of the Journey's as the real host does, recording it", async () => {
@@ -711,6 +713,7 @@ describe("the fake host's sessions on disk", () => {
       sessionFile: tomatoes.file,
       entries: tomatoes.entries,
       earlier: 3,
+      resumes: { model: { provider: "anthropic", id: "claude-test" }, thinkingLevel: "medium" },
     });
     await expect(client.request({ type: "session.transcript", journey: "garden", sessionFile: `${folder}/other.jsonl` })).rejects.toMatchObject({
       code: "session_open_failed",
@@ -809,5 +812,177 @@ describe("the fake host's sessions on disk", () => {
       serveFakeHost(world({ sessions: { garden: [{ ...roses, entries: [{ kind: "user", text: "sk-ant-abcdefghijkl" }] }] } })),
     ).toThrow(/an API key/);
     expect(() => serveFakeHost(world({ sessions: { attic: [roses] } }))).toThrow(/sessions names "attic"/);
+  });
+});
+
+describe("the fake host and a session's model and thinking", () => {
+  const test = world().models[0]!;
+  const deep = { provider: "anthropic", id: "claude-deep", name: "Claude Deep", reasoning: true, thinkingLevels: ["low", "medium", "high", "xhigh", "max"] };
+  const testRef = { provider: "anthropic", id: "claude-test" };
+  const deepRef = { provider: "anthropic", id: "claude-deep" };
+  const folder = "/Users/test/.pi/agent/sessions/--Users-test-garden--";
+  const deepSession: ScriptedSession = {
+    file: `${folder}/deep.jsonl`,
+    id: "garden-deep",
+    title: "Dig deep",
+    created: Date.UTC(2025, 9, 29, 9),
+    modified: Date.UTC(2025, 9, 29, 10),
+    entries: [{ kind: "user", text: "Dig deep" }],
+    model: deepRef,
+    thinkingLevel: "xhigh",
+  };
+  const plainSession: ScriptedSession = { ...deepSession, file: `${folder}/plain.jsonl`, id: "garden-plain", model: undefined, thinkingLevel: undefined };
+  const farSession: ScriptedSession = { ...deepSession, file: `${folder}/far.jsonl`, id: "garden-far", model: { provider: "faraway", id: "far-1" }, thinkingLevel: "max" };
+  const models = (overrides: Partial<World> = {}) =>
+    world({ models: [test, deep], sessions: { garden: [deepSession, plainSession, farSession] }, ...overrides });
+
+  it("says what a new session in each Journey starts with: the world's, else its first model at medium", async () => {
+    const beds = { id: "beds", name: "Beds", status: "active", description: "", projectPath: "/Users/test/beds" };
+    const host = serveFakeHost(models({ journeys: [...world().journeys, beds], defaults: { garden: { model: deepRef, thinkingLevel: "high" } } }));
+    const { client } = await connected(host.endpoint);
+    await expect(client.request({ type: "sessions.list", journey: "garden" })).resolves.toMatchObject({ defaults: { model: deepRef, thinkingLevel: "high" } });
+    await expect(client.request({ type: "sessions.list", journey: "beds" })).resolves.toMatchObject({ defaults: { model: testRef, thinkingLevel: "medium" } });
+  });
+
+  it("says what resuming a file starts with: its own model and level, the defaults where it has none, the default model where Pi cannot use its own", async () => {
+    const host = serveFakeHost(models());
+    const { client } = await connected(host.endpoint);
+    const resumes = async (file: string) => (await client.request({ type: "session.transcript", journey: "garden", sessionFile: file })) as { resumes: unknown };
+    expect((await resumes(deepSession.file)).resumes).toEqual({ model: deepRef, thinkingLevel: "xhigh" });
+    expect((await resumes(plainSession.file)).resumes).toEqual({ model: testRef, thinkingLevel: "medium" });
+    // Its own level, clamped to the model it falls back to.
+    expect((await resumes(farSession.file)).resumes).toEqual({ model: testRef, thinkingLevel: "high" });
+  });
+
+  it("opens a new session on the person's choice, or on the defaults, and its file records what it started on", async () => {
+    const host = serveFakeHost(models({ turns: [{ prompt: "Hello", events: answer("Hello") }] }));
+    const { client } = await connected(host.endpoint);
+    await expect(client.request({ type: "session.open", journey: "garden", model: deepRef, thinkingLevel: "low" })).resolves.toMatchObject({
+      model: deepRef,
+      thinkingLevel: "low",
+      diagnostics: [],
+    });
+    await client.request({ type: "session.prompt", sessionId: "session-1", text: "Hello" });
+    await expect(client.request({ type: "session.transcript", journey: "garden", sessionFile: "/Users/test/.pi/agent/sessions/session-1.jsonl" })).resolves.toMatchObject({
+      resumes: { model: deepRef, thinkingLevel: "low" },
+    });
+    await expect(client.request({ type: "session.open", journey: "garden" })).resolves.toMatchObject({ model: testRef, thinkingLevel: "medium" });
+  });
+
+  it("resumes a file on its own model, or on the person's choice, which its file then records", async () => {
+    const host = serveFakeHost(models());
+    const { client } = await connected(host.endpoint);
+    await expect(client.request({ type: "session.open", journey: "garden", sessionFile: deepSession.file })).resolves.toMatchObject({
+      model: deepRef,
+      thinkingLevel: "xhigh",
+    });
+    await expect(
+      client.request({ type: "session.open", journey: "garden", sessionFile: plainSession.file, model: deepRef, thinkingLevel: "max" }),
+    ).resolves.toMatchObject({ model: deepRef, thinkingLevel: "max", diagnostics: [] });
+    await expect(client.request({ type: "session.transcript", journey: "garden", sessionFile: plainSession.file })).resolves.toMatchObject({
+      resumes: { model: deepRef, thinkingLevel: "max" },
+    });
+  });
+
+  it("says Pi's line where a resumed file's model could not be restored, unless the person picked over it", async () => {
+    const host = serveFakeHost(models());
+    const { client } = await connected(host.endpoint);
+    await expect(client.request({ type: "session.open", journey: "garden", sessionFile: farSession.file })).resolves.toMatchObject({
+      model: testRef,
+      thinkingLevel: "high",
+      diagnostics: ["Could not restore model faraway/far-1. Using anthropic/claude-test"],
+    });
+    await expect(
+      client.request({ type: "session.open", journey: "garden", sessionFile: farSession.file, model: deepRef, thinkingLevel: "high" }),
+    ).resolves.toMatchObject({ model: deepRef, diagnostics: [] });
+  });
+
+  it("changes an open session's model and level, answering what it runs on after, at once even while a turn answers", async () => {
+    const host = serveFakeHost(models({ turns: [{ prompt: "Hello", events: answer("Hello"), held: true }] }));
+    const { client } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden", sessionFile: deepSession.file });
+    await client.request({ type: "session.prompt", sessionId: "garden-deep", text: "Hello" });
+    await expect(client.request({ type: "session.configure", sessionId: "garden-deep", model: testRef, thinkingLevel: "low" })).resolves.toEqual({
+      type: "session.configure",
+      sessionId: "garden-deep",
+      model: testRef,
+      thinkingLevel: "low",
+    });
+    host.heldTurn().release();
+    await expect(client.request({ type: "session.transcript", journey: "garden", sessionFile: deepSession.file })).resolves.toMatchObject({
+      resumes: { model: testRef, thinkingLevel: "low" },
+    });
+    expect(host.requestsOf("session.configure")).toEqual([{ type: "session.configure", sessionId: "garden-deep", model: testRef, thinkingLevel: "low" }]);
+  });
+
+  it("refuses a model the world does not list, as the real host refuses one Pi cannot use, before anything closes", async () => {
+    const host = serveFakeHost(models());
+    const { client } = await connected(host.endpoint);
+    const far = { provider: "faraway", id: "far-1" };
+    await client.request({ type: "session.open", journey: "garden" });
+    await expect(client.request({ type: "session.open", journey: "garden", model: far, thinkingLevel: "low" })).rejects.toMatchObject({
+      code: "model_not_available",
+      message: "Pi knows no model faraway/far-1.",
+    });
+    expect(host.closedSessions).toEqual([]);
+    await expect(client.request({ type: "session.configure", sessionId: "session-1", model: far, thinkingLevel: "low" })).rejects.toMatchObject({
+      code: "model_not_available",
+    });
+    expect(take()).toEqual([]);
+  });
+
+  it("records a level the model does not list, and a change without its pair: the UI offers only a model's levels, and sends both", async () => {
+    const host = serveFakeHost(models());
+    const { client } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden", model: deepRef, thinkingLevel: "off" });
+    await client.request({ type: "session.configure", sessionId: "session-1", model: testRef, thinkingLevel: "xhigh" });
+    await client.request({ type: "session.configure", sessionId: "session-1", thinkingLevel: "low" });
+    await client.request({ type: "session.configure", sessionId: "session-1", model: deepRef });
+    expect(take().map((violation) => violation.detail)).toEqual([
+      "session.open asked off of anthropic/claude-deep, which lists low, medium, high, xhigh, max: the UI offers only a model's own levels",
+      "session.configure asked xhigh of anthropic/claude-test, which lists off, minimal, low, medium, high: the UI offers only a model's own levels",
+      "session.configure without a model: the UI sends the model and its level together",
+      "session.configure without a level: the UI sends the model and its level together",
+    ]);
+  });
+
+  it("holds a session.configure until the test releases it, and records one held and never released", async () => {
+    const host = serveFakeHost(models({ heldConfigures: ["garden"] }));
+    const { client } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden" });
+    let answered = false;
+    const change = client.request({ type: "session.configure", sessionId: "session-1", model: deepRef, thinkingLevel: "high" }).then((result) => {
+      answered = true;
+      return result;
+    });
+    await vi.waitFor(() => expect(host.requestsOf("session.configure")).toHaveLength(1));
+    expect(answered).toBe(false);
+    host.heldConfigure("garden").release();
+    await expect(change).resolves.toMatchObject({ model: deepRef, thinkingLevel: "high" });
+
+    const other = serveFakeHost(models({ heldConfigures: ["garden"] }));
+    const second = await connected(other.endpoint);
+    await second.client.request({ type: "session.open", journey: "garden" });
+    void second.client.request({ type: "session.configure", sessionId: "session-1", model: deepRef, thinkingLevel: "high" });
+    await vi.waitFor(() => expect(other.requestsOf("session.configure")).toHaveLength(1));
+    endFakeHosts();
+    expect(take().map((violation) => violation.detail)).toEqual(["the session.configure held for garden was never released"]);
+  });
+
+  it("fails a session.configure as scripted for a Journey until the test stops it", async () => {
+    const refused = { code: "model_not_available", message: "No credential for anthropic: sign in first." } as const;
+    const host = serveFakeHost(models({ failures: [{ request: "session.configure", journey: "garden", error: refused }] }));
+    const { client } = await connected(host.endpoint);
+    await client.request({ type: "session.open", journey: "garden" });
+    await expect(client.request({ type: "session.configure", sessionId: "session-1", model: deepRef, thinkingLevel: "high" })).rejects.toThrow(refused.message);
+    host.stopFailing("session.configure", "garden");
+    await expect(client.request({ type: "session.configure", sessionId: "session-1", model: deepRef, thinkingLevel: "high" })).resolves.toMatchObject({ model: deepRef });
+  });
+
+  it("refuses a world whose defaults or sessions break the protocol, or name a Journey it does not have", () => {
+    expect(() => serveFakeHost(models({ defaults: { garden: { thinkingLevel: "" } } }))).toThrow(/defaults\.garden/);
+    expect(() => serveFakeHost(models({ defaults: { nowhere: { thinkingLevel: "medium" } } }))).toThrow(/defaults names "nowhere"/);
+    expect(() => serveFakeHost(models({ sessions: { garden: [{ ...deepSession, thinkingLevel: "" }] } }))).toThrow(/sessions\.garden\[0\]/);
+    expect(() => serveFakeHost(models({ heldConfigures: ["attic"] }))).toThrow(/heldConfigures holds "attic"/);
   });
 });

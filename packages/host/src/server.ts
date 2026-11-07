@@ -46,11 +46,12 @@ import {
   loadMirrorConfiguration,
   MirrorNotConfiguredError,
 } from "./mirror.ts";
+import { journeyStart, ModelNotAvailableError } from "./modelChoice.ts";
 import { materializeRuntimeBin } from "./runtimeBin.ts";
 import { listSessions, SessionFileRefusedError, SessionsUnreadableError } from "./sessionIndex.ts";
 import { SessionBusyError, SessionNotFoundError, SessionOpenError, SessionRegistry } from "./sessions.ts";
 import { shutdownHost } from "./shutdown.ts";
-import { readSessionTranscript } from "./transcript.ts";
+import { projectTranscript, readSessionBranch } from "./transcript.ts";
 import { PromptRefusedError } from "./turnControl.ts";
 
 const MIRROR_PACKAGE_JSON = new URL(import.meta.resolve("mirror-mind/package.json"));
@@ -125,13 +126,25 @@ async function handle(
           ...(request.journey !== undefined ? { journey: request.journey } : {}),
           ...(request.cwd !== undefined ? { cwd: request.cwd } : {}),
           ...(request.sessionFile !== undefined ? { sessionFile: request.sessionFile } : {}),
+          ...(request.model !== undefined ? { model: request.model } : {}),
+          ...(request.thinkingLevel !== undefined ? { thinkingLevel: request.thinkingLevel } : {}),
         });
-      // The two reads behind a look (D14): nothing is opened, nothing written to Mirror.
-      case "sessions.list":
-        return { type: "sessions.list", journey: request.journey, sessions: await listSessions(journeyProjectPath(request.journey)) };
+      // The two reads behind a look (D14): nothing is opened, nothing written,
+      // to Mirror or to Pi's settings. Each says what the session shown would
+      // run on: a new one, the Journey's defaults; a file, what resuming it starts with.
+      case "sessions.list": {
+        const cwd = journeyProjectPath(request.journey);
+        return { type: "sessions.list", journey: request.journey, sessions: await listSessions(cwd), defaults: journeyStart(cwd, auth.modelRuntime) };
+      }
       case "session.transcript": {
-        const transcript = await readSessionTranscript(journeyProjectPath(request.journey), request.sessionFile);
-        return { type: "session.transcript", sessionFile: request.sessionFile, ...transcript };
+        const cwd = journeyProjectPath(request.journey);
+        const branch = await readSessionBranch(cwd, request.sessionFile);
+        return {
+          type: "session.transcript",
+          sessionFile: request.sessionFile,
+          ...projectTranscript(branch),
+          resumes: journeyStart(cwd, auth.modelRuntime, branch),
+        };
       }
       case "session.prompt": {
         const disposition = await sessions.prompt(request.sessionId, request.text, request.streamingBehavior);
@@ -144,6 +157,13 @@ async function handle(
       case "session.close":
         await sessions.close(request.sessionId);
         return { type: "session.close", sessionId: request.sessionId };
+      case "session.configure": {
+        const runsOn = await sessions.configure(request.sessionId, {
+          ...(request.model !== undefined ? { model: request.model } : {}),
+          ...(request.thinkingLevel !== undefined ? { thinkingLevel: request.thinkingLevel } : {}),
+        });
+        return { type: "session.configure", sessionId: request.sessionId, ...runsOn };
+      }
       case "auth.providers":
         return { type: "auth.providers", providers: auth.providers() };
       case "auth.login":
@@ -172,6 +192,7 @@ function failureOf(cause: unknown): HostError {
   if (cause instanceof SessionBusyError) return error("session_busy", cause.message);
   if (cause instanceof SessionOpenError) return error("session_open_failed", cause.message);
   if (cause instanceof PromptRefusedError) return error("prompt_refused", cause.message);
+  if (cause instanceof ModelNotAvailableError) return error("model_not_available", cause.message);
   if (cause instanceof SessionFileRefusedError) return error("session_open_failed", cause.message);
   if (cause instanceof SessionsUnreadableError) return error("sessions_unreadable", cause.message);
   if (cause instanceof MirrorNotConfiguredError) return error("mirror_not_configured", cause.message);

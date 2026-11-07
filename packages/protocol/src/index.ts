@@ -17,10 +17,54 @@ import { z } from "zod";
  * Bumped on any breaking change to the schemas below. A new field is one:
  * zod strips a field it does not know, so an older host would quietly ignore
  * it (an old host given `sessionFile` would open a new session instead of
- * resuming; one given `streamingBehavior` would refuse every steer as busy).
+ * resuming; one given `streamingBehavior` would refuse every steer as busy;
+ * one given a model on `session.open` would open on Pi's default).
  * The version, checked at hello, is what refuses the mismatch.
  */
-export const PROTOCOL_VERSION = "0.6.0";
+export const PROTOCOL_VERSION = "0.7.0";
+
+// --- Model and thinking ---------------------------------------------------
+
+export const ModelRef = z.object({
+  provider: z.string(),
+  id: z.string(),
+});
+
+/**
+ * What a session runs on: its model and its thinking level. The model is
+ * absent only where Pi will choose it when the session starts, a choice the
+ * host cannot name beforehand (Pi's settings name no model it can use). A
+ * level stays a string, checked against the model's own list, so a level a
+ * later Pi adds does not fail at the socket.
+ */
+export const ModelAndLevel = z.object({
+  model: ModelRef.optional(),
+  thinkingLevel: z.string().min(1),
+});
+
+/**
+ * Pi's thinking levels, in Pi's order: the order its clamp walks
+ * (`EXTENDED_THINKING_LEVELS` in pi-ai 1.4.0, which Pi does not export).
+ */
+export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+
+/**
+ * The level a model runs at when `level` is asked of it, as Pi's own
+ * `clampThinkingLevel` (pi-ai 1.4.0) decides over the levels the model
+ * supports: `level` when supported, else the nearest supported level up,
+ * else the nearest down; the lowest supported for a level Pi does not know.
+ * One copy, for the host and the UI alike; a host test pins it to Pi's.
+ */
+export function clampLevel(level: string, supported: readonly string[]): string {
+  if (supported.includes(level)) return level;
+  const order: readonly string[] = THINKING_LEVELS;
+  const asked = order.indexOf(level);
+  if (asked === -1) return supported[0] ?? "off";
+  const up = order.slice(asked).find((candidate) => supported.includes(candidate));
+  if (up !== undefined) return up;
+  const down = order.slice(0, asked).reverse().find((candidate) => supported.includes(candidate));
+  return down ?? supported[0] ?? "off";
+}
 
 // --- Client → host --------------------------------------------------------
 
@@ -62,12 +106,23 @@ export const SessionOpenRequest = z
     /** Required without a Journey; with one, overrides the Journey's project path. */
     cwd: z.string().min(1).optional(),
     sessionFile: z.string().min(1).optional(),
+    /**
+     * The person's choice for the session, picked before its first send: a
+     * model and its level, always together, since Pi would otherwise move the
+     * level by its own rule and the screen would say one level and run
+     * another. Without them, the session starts or resumes as Pi decides.
+     */
+    model: ModelRef.optional(),
+    thinkingLevel: z.string().min(1).optional(),
   })
   .refine((request) => request.journey !== undefined || request.cwd !== undefined, {
     message: "session.open needs a journey or a cwd",
   })
   .refine((request) => request.sessionFile === undefined || request.journey !== undefined, {
     message: "session.open resumes a session file only for a Journey",
+  })
+  .refine((request) => (request.model === undefined) === (request.thinkingLevel === undefined), {
+    message: "session.open takes a model and its thinking level together",
   });
 
 /**
@@ -120,6 +175,24 @@ export const SessionCloseRequest = z.object({
   type: z.literal("session.close"),
   sessionId: z.string().min(1),
 });
+
+/**
+ * Change an open session's model, its thinking level, or both, as `/model`
+ * and `/thinking` change them in terminal Pi: for this session only,
+ * recorded in its file, never in Pi's settings. While a turn runs, Pi takes
+ * the change at its next request in that run. Answered with what the
+ * session runs on after it.
+ */
+export const SessionConfigureRequest = z
+  .object({
+    type: z.literal("session.configure"),
+    sessionId: z.string().min(1),
+    model: ModelRef.optional(),
+    thinkingLevel: z.string().min(1).optional(),
+  })
+  .refine((request) => request.model !== undefined || request.thinkingLevel !== undefined, {
+    message: "session.configure needs a model or a thinking level",
+  });
 
 // --- Provider authentication ---------------------------------------------
 //
@@ -176,6 +249,7 @@ export const ClientRequestBody = z.discriminatedUnion("type", [
   SessionPromptRequest,
   SessionAbortRequest,
   SessionCloseRequest,
+  SessionConfigureRequest,
   AuthProvidersRequest,
   AuthLoginRequest,
   AuthAnswerRequest,
@@ -209,11 +283,6 @@ export const HelloResult = z.object({
 export const PingResult = z.object({
   type: z.literal("ping"),
   uptimeMs: z.number().nonnegative(),
-});
-
-export const ModelRef = z.object({
-  provider: z.string(),
-  id: z.string(),
 });
 
 export const Journey = z.object({
@@ -261,6 +330,11 @@ export const SessionsListResult = z.object({
   type: z.literal("sessions.list"),
   journey: z.string(),
   sessions: z.array(SessionSummary),
+  /**
+   * What a new session in the Journey's project starts with: Pi's settings'
+   * default (the project's over the global), as Pi resolves it at start.
+   */
+  defaults: ModelAndLevel,
 });
 
 /**
@@ -296,6 +370,8 @@ export const SessionTranscriptResult = z.object({
   entries: z.array(TranscriptEntry),
   /** The user and assistant messages before the first entry, left out by the host's bound. */
   earlier: z.number().int().nonnegative(),
+  /** What resuming the session starts with, by Pi's own resume rule: the file's model and level, or Pi's default where Pi cannot use them. */
+  resumes: ModelAndLevel,
 });
 
 /**
@@ -332,6 +408,12 @@ export const SessionAbortResult = z.object({
 
 export const SessionCloseResult = z.object({
   type: z.literal("session.close"),
+  sessionId: z.string().min(1),
+});
+
+/** What the session runs on after a `session.configure`: Pi's answer, a level Pi clamped included. */
+export const SessionConfigureResult = ModelAndLevel.extend({
+  type: z.literal("session.configure"),
   sessionId: z.string().min(1),
 });
 
@@ -376,6 +458,8 @@ export const AvailableModel = z.object({
   id: z.string(),
   name: z.string(),
   reasoning: z.boolean(),
+  /** The thinking levels Pi supports for this model, in Pi's order: only `off` for a model that does not reason. */
+  thinkingLevels: z.array(z.string().min(1)),
 });
 
 export const ModelsAvailableResult = z.object({
@@ -393,6 +477,7 @@ export const HostResultBody = z.discriminatedUnion("type", [
   SessionPromptResult,
   SessionAbortResult,
   SessionCloseResult,
+  SessionConfigureResult,
   AuthProvidersResult,
   AuthLoginResult,
   AuthAnswerResult,
@@ -413,6 +498,8 @@ export const HostError = z.object({
     "sessions_unreadable",
     /** The host refused a prompt Pi could not start (no model, no credential, compaction), in its own words. */
     "prompt_refused",
+    /** A model Pi does not know or has no credential for, or a thinking level Pi does not have, in the host's words. */
+    "model_not_available",
     "mirror_not_configured",
     "journey_not_found",
     "journey_has_no_project_path",
@@ -544,6 +631,8 @@ export const HostMessage = z.union([HostResponse, HostEvent]);
 export type HelloRequest = z.infer<typeof HelloRequest>;
 export type PingRequest = z.infer<typeof PingRequest>;
 export type SessionOpenRequest = z.infer<typeof SessionOpenRequest>;
+export type SessionConfigureRequest = z.infer<typeof SessionConfigureRequest>;
+export type ModelAndLevel = z.infer<typeof ModelAndLevel>;
 export type SessionPromptRequest = z.infer<typeof SessionPromptRequest>;
 export type StreamingBehavior = z.infer<typeof StreamingBehavior>;
 export type PromptDisposition = z.infer<typeof PromptDisposition>;

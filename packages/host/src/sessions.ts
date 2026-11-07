@@ -33,6 +33,17 @@
 // one at a time per session: Pi checks whether a run is active only after
 // awaiting its input handlers, so two prompts in flight could both start a
 // run. A stop is never held behind a prompt.
+//
+// A session's model and thinking level are the person's to choose
+// (modelChoice.ts, CV1.DS2.US3), as terminal Pi's `/model` and `/thinking`
+// choose them: for the session only, recorded in its file, never in Pi's
+// settings. A choice made before the first send comes with the open and is
+// checked before anything closes: a new session starts on it, as
+// `pi --model … --thinking …` would start one, and a resumed one takes it
+// once Pi has started it, as `/model` after `pi -r` would. A choice on an
+// open session takes its place in line with the session's prompts, so a
+// prompt sent after it runs on it; during a run, Pi takes it at its next
+// request.
 
 import {
   type AgentSession,
@@ -48,6 +59,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type {
   HostEvent,
+  ModelAndLevel,
+  ModelRef,
   PromptDisposition,
   QueuedMessages,
   SessionEvent,
@@ -57,10 +70,11 @@ import type {
 import { fileURLToPath } from "node:url";
 
 import { bindSessionToJourney, conversationForSession, journeyProjectPath } from "./mirror.ts";
+import { applyChoice, fallbackLine, hasCredential, piLevel, usableModel } from "./modelChoice.ts";
 import { containedSessionFile } from "./sessionIndex.ts";
 import { type OpenSessionFacts, planOpen, SessionBusyError } from "./sessionPolicy.ts";
 import { textOf } from "./transcript.ts";
-import { acceptPrompt, stopTurn } from "./turnControl.ts";
+import { acceptPrompt, inOrder, type Line, stopTurn } from "./turnControl.ts";
 
 export { SessionBusyError };
 
@@ -84,8 +98,8 @@ interface OpenSession {
   unsubscribe: () => void;
   /** The host's own watchers of this session's projected events: a stop waiting for its run to end. */
   watchers: Set<(event: SessionEvent) => void>;
-  /** The prompt Pi is accepting: the next one waits for it. */
-  accepting: Promise<unknown>;
+  /** The prompt or the change Pi is taking: the next one waits for it. */
+  line: Line;
 }
 
 export interface OpenSessionRequest {
@@ -93,6 +107,15 @@ export interface OpenSessionRequest {
   cwd?: string;
   /** One of the Journey's session files, to resume; a new session without it. */
   sessionFile?: string;
+  /** The person's choice, picked before the first send; Pi's own start without it. */
+  model?: ModelRef;
+  thinkingLevel?: string;
+}
+
+/** A change to an open session's model, its level, or both. */
+export interface SessionChoice {
+  model?: ModelRef;
+  thinkingLevel?: string;
 }
 
 export class SessionOpenError extends Error {
@@ -147,12 +170,16 @@ export class SessionRegistry {
       if (!journey) throw new SessionOpenError("A session file is resumed only for a Journey.");
       resumed = await containedSessionFile(cwd, request.sessionFile);
     }
+    // The person's choice, refused in the host's words before anything closes.
+    const chosen = request.model ? await usableModel(this.#modelRuntime, request.model) : undefined;
+    const level = request.thinkingLevel === undefined ? undefined : piLevel(request.thinkingLevel);
     // Refused before anything closes; then the Journey's open session, if any, is closed.
     const plan = planOpen(this.#facts(), { ...(journey ? { journey } : {}), ...(resumed ? { file: resumed } : {}) });
     for (const sessionId of plan.close) await this.close(sessionId);
     const agentDir = getAgentDir();
     let session: AgentSession;
     let diagnostics: string[] = [];
+    let modelFallback: string | undefined;
     // Filled once the Journey is bound; read by the system-prompt hook on every run.
     const journeyContext = { text: "" };
     try {
@@ -184,6 +211,10 @@ export class SessionRegistry {
         settingsManager,
         resourceLoader,
         sessionManager,
+        // A new session starts on the choice and records it as its start.
+        // A resumed one would take these without recording them, so the next
+        // `pi -r` would restore the old model: it takes the choice below.
+        ...(resumed ? {} : { ...(chosen ? { model: chosen } : {}), ...(level ? { thinkingLevel: level } : {}) }),
         // The built-in bash tool, plus this session's identity for Mirror:
         // a `mirror …` the agent runs binds to this session by name instead
         // of guessing the most recent one — the guess that once moved other
@@ -200,6 +231,7 @@ export class SessionRegistry {
         ],
       });
       session = created.session;
+      modelFallback = created.modelFallbackMessage;
       // A resource that failed to load is a fact the UI must be able to show;
       // the Mirror package failing here means no conversation gets logged.
       diagnostics = created.extensionsResult.errors.map((failure) => `${failure.path}: ${failure.error}`);
@@ -223,7 +255,7 @@ export class SessionRegistry {
       ...(journey ? { journey } : {}),
       unsubscribe,
       watchers,
-      accepting: Promise.resolve(),
+      line: { tail: Promise.resolve() },
     });
 
     // Emits `session_start` to every extension — the Mirror logger opens its
@@ -241,6 +273,21 @@ export class SessionRegistry {
         });
       },
     });
+
+    // A resumed session takes the choice once Pi has started it, recorded as
+    // `/model` records it. If Pi refuses it now, the session goes as it came,
+    // through close(), so Mirror closes the conversation it opened.
+    if (resumed && (chosen || level)) {
+      try {
+        await applyChoice(session, { model: chosen, thinkingLevel: level });
+      } catch (cause) {
+        await this.close(sessionId).catch(() => undefined);
+        throw cause;
+      }
+    }
+    // Pi's words where it could not restore the file's model, unless the person picked over it.
+    const fallback = fallbackLine(modelFallback, chosen !== undefined);
+    if (fallback) diagnostics = [...diagnostics, fallback];
 
     const sessionFile = session.sessionManager.getSessionFile();
     if (!sessionFile) {
@@ -285,11 +332,9 @@ export class SessionRegistry {
    * reach Pi one at a time per session.
    */
   prompt(sessionId: string, text: string, behavior?: StreamingBehavior): Promise<PromptDisposition> {
-    const open = this.#get(sessionId);
-    const accepted = open.accepting.then(() =>
+    return inOrder(this.#get(sessionId).line, () =>
       acceptPrompt(this.#get(sessionId).session, text, behavior, {
-        hasCredential: async (provider) =>
-          this.#modelRuntime.hasConfiguredAuth(provider) || (await this.#modelRuntime.checkAuth(provider)) !== undefined,
+        hasCredential: (provider) => hasCredential(this.#modelRuntime, provider),
         onLateFailure: (cause) =>
           this.#emit({
             type: "session.extension_error",
@@ -300,8 +345,20 @@ export class SessionRegistry {
           }),
       }),
     );
-    open.accepting = accepted.catch(() => undefined);
-    return accepted;
+  }
+
+  /**
+   * Change the session's model, its level, or both, for this session only,
+   * and answer what it runs on after. In line with the session's prompts, so
+   * a prompt sent after it runs on it; during a run, Pi takes it at its next
+   * request.
+   */
+  configure(sessionId: string, choice: SessionChoice): Promise<ModelAndLevel> {
+    return inOrder(this.#get(sessionId).line, async () => {
+      const session = this.#get(sessionId).session;
+      const model = choice.model ? await usableModel(this.#modelRuntime, choice.model) : undefined;
+      return applyChoice(session, { model, thinkingLevel: choice.thinkingLevel });
+    });
   }
 
   /** Stop the session's turn; answers with the queued messages withdrawn from it (turnControl.ts). */

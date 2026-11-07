@@ -18,7 +18,7 @@ import {
   ModelRuntime,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import type { AuthEvent, AuthPrompt } from "@earendil-works/pi-ai";
+import { type AuthEvent, type AuthPrompt, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type {
   AuthFlowEvent,
   AuthFlowPrompt,
@@ -148,6 +148,7 @@ export class AuthBroker {
     await this.#runtime.logout(providerId);
   }
 
+  /** The models a request can be sent to now, each with the thinking levels Pi supports for it. */
   async available(): Promise<AvailableModel[]> {
     const models = await this.#runtime.getAvailable();
     return models.map((model) => ({
@@ -155,6 +156,7 @@ export class AuthBroker {
       id: model.id,
       name: model.name,
       reasoning: model.reasoning,
+      thinkingLevels: getSupportedThinkingLevels(model),
     }));
   }
 

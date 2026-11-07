@@ -23,6 +23,12 @@
 // the loop had already taken, whose echo arrives while the stop lands: that
 // one is in the transcript.
 //
+// A session's prompts and its model changes (CV1.DS2.US3) reach Pi one at a
+// time, in the order they came: Pi checks whether a run is active only
+// after awaiting its input handlers, and a model change awaits Pi's
+// credential check before it applies anything, so a prompt sent right after
+// a change could otherwise run on the old model.
+//
 // Pure over the parts of a Pi session it reads, so it is proven without Pi;
 // sessions.ts applies it to the real one.
 
@@ -101,6 +107,22 @@ export async function acceptPrompt(
         },
       );
   });
+}
+
+/** A session's line of work for Pi: what was handed to Pi last, which the next waits for. */
+export interface Line {
+  tail: Promise<unknown>;
+}
+
+/**
+ * Run `work` once everything put on `line` before it has been handed to Pi,
+ * and put it on the line for what comes after. A failure is its sender's:
+ * the next on the line goes all the same.
+ */
+export function inOrder<T>(line: Line, work: () => Promise<T>): Promise<T> {
+  const handed = line.tail.then(work);
+  line.tail = handed.catch(() => undefined);
+  return handed;
 }
 
 /** What a stop reads of an open Pi session; Pi's AgentSession is one. */

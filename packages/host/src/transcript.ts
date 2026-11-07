@@ -50,15 +50,22 @@ type ToolEntry = Extract<TranscriptEntry, { kind: "tool" }>;
  * Refuses a file that is not one of them before reading anything.
  */
 export async function readSessionTranscript(cwd: string, file: string, agentDir: string = getAgentDir()): Promise<Transcript> {
+  return projectTranscript(await readSessionBranch(cwd, file, agentDir));
+}
+
+/**
+ * One of the project path's sessions, as Pi reads its branch from the file:
+ * what the transcript draws, and what resuming it starts with
+ * (modelChoice.ts). Refuses a file that is not one of them before reading.
+ */
+export async function readSessionBranch(cwd: string, file: string, agentDir: string = getAgentDir()): Promise<SessionEntry[]> {
   const contained = await containedSessionFile(cwd, file, agentDir);
-  let branch: SessionEntry[];
   try {
-    branch = SessionManager.open(contained, undefined, cwd).getBranch();
+    return SessionManager.open(contained, undefined, cwd).getBranch();
   } catch (cause) {
     // Pi's words carry the path: these do not.
     throw new SessionsUnreadableError("This session could not be read: its file is not a Pi session Pi can load.", { cause });
   }
-  return projectTranscript(branch);
 }
 
 /** The branch's entries, oldest first, as rows: the last `limit` of them, every text within `cap`. */
