@@ -16,7 +16,7 @@
 // answering. Before ready, the step that was waiting reports it through its
 // own rejection, so the close is left to it: one report, not two.
 
-import type { HostIdentity } from "@mirror-desktop/protocol";
+import type { AvailableModel, HostIdentity } from "@mirror-desktop/protocol";
 
 import { applyHostEvent, connectionLost } from "../conversations/store.ts";
 import { loadJourneys } from "../journeys/store.ts";
@@ -50,17 +50,17 @@ export async function connectToHost(
   client.onEvent = (event) => applyHostEvent(event, client);
   hostConnected(client, opened.host);
 
-  let canUseModels: boolean;
+  let models: readonly AvailableModel[];
   try {
     const result = await client.request({ type: "models.available" });
     if (result.type !== "models.available") throw new Error("The host answered models.available with something else.");
-    canUseModels = result.models.length > 0;
+    models = result.models;
   } catch (error) {
     if (!lease.cancelled) hostFailed(failureOf(error).message);
     return;
   }
   if (lease.cancelled) return;
-  hostReady(client, canUseModels);
+  hostReady(client, models);
   client.onClose = (lost) => {
     if (lease.cancelled) return;
     hostLost(client, lost.message);

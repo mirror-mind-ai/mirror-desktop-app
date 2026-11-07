@@ -8,6 +8,7 @@ import {
   showsOpenSession,
   useConversations,
 } from "../conversations/store.ts";
+import { modelLabel } from "../conversations/headerChoice.ts";
 import type { Row } from "../conversations/transcript.ts";
 import { useHost } from "../host/store.ts";
 import { Transcript } from "../transcript/Transcript.tsx";
@@ -46,7 +47,7 @@ export function Conversation({ journey }: { journey: Journey }) {
         {journey.projectPath && canUseModels ? <SessionsList journeyId={journey.id} conversation={conversation} /> : null}
         <p className="flex min-w-0 items-center gap-4 truncate font-mono text-ui text-muted">
           {where ? <span>{shortenHome(where)}</span> : null}
-          {session?.model ? <span>{session.model}</span> : null}
+          {session?.model ? <span>{modelLabel(session.model)}</span> : null}
           {session ? <span>thinking {session.thinkingLevel}</span> : null}
         </p>
       </header>

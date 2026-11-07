@@ -13,7 +13,7 @@ export function SignInPanel({ onDone }: { onDone?: () => void }) {
     <SignIn
       client={client}
       onSignedIn={() => {
-        signedIn();
+        void signedIn(client);
         onDone?.();
       }}
       {...(onDone ? { onDismiss: onDone } : {})}

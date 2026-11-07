@@ -1,4 +1,5 @@
 import type {
+  AvailableModel,
   ClientRequestBody,
   HostEvent,
   HostResultBody,
@@ -12,14 +13,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ConnectionLostError, type HostConnection, HostRequestError } from "../host/client.ts";
 import { resetAllStores } from "../stores/registry.ts";
+import { shownChoice } from "./headerChoice.ts";
 import {
   abort,
   applyHostEvent,
+  chooseModel,
   chooseSession,
+  chooseThinking,
   connectionLost,
   type Conversation,
   isWorking,
   queueMessage,
+  refreshSessions,
   retryRead,
   retrySessions,
   selectJourney,
@@ -145,7 +150,7 @@ describe("sending", () => {
     expect(entry("garden")).toMatchObject({
       status: "open",
       running: true,
-      session: { id: "session-1", cwd: "/Users/test/gardens/garden", model: "anthropic/claude-test", thinkingLevel: "medium" },
+      session: { id: "session-1", cwd: "/Users/test/gardens/garden", model: { provider: "anthropic", id: "claude-test" }, thinkingLevel: "medium" },
     });
     expect(requests).toEqual([
       { type: "session.open", journey: "garden" },
@@ -904,5 +909,276 @@ describe("a Journey's sessions", () => {
     applyHostEvent(event("session-1", { type: "text_delta", delta: "late" }));
     applyHostEvent(event("session-1", { type: "agent_settled", aborted: false }));
     expect(entry("garden")).toMatchObject({ rows: [], running: false });
+  });
+});
+
+describe("a session's model and thinking", () => {
+  const folder = "/Users/test/.pi/agent/sessions/--Users-test-garden--";
+  const garden = { id: "garden", projectPath: "/Users/test/garden" };
+  const testRef = { provider: "anthropic", id: "claude-test" };
+  const deepRef = { provider: "anthropic", id: "claude-deep" };
+  const testModel: AvailableModel = { ...testRef, name: "Claude Test", reasoning: true, thinkingLevels: ["off", "minimal", "low", "medium", "high"] };
+  const deepModel: AvailableModel = { ...deepRef, name: "Claude Deep", reasoning: true, thinkingLevels: ["low", "medium", "high", "xhigh", "max"] };
+  const summary = (id: string, modified: number): SessionSummary => ({ file: `${folder}/${id}.jsonl`, id, title: id, created: modified, modified });
+  const tomatoes = summary("tomatoes", 2);
+  const roses = summary("roses", 1);
+
+  /**
+   * A host with Garden's two sessions, tomatoes recorded on claude-deep at
+   * high and roses on claude-test at low, and claude-test at `defaultLevel`
+   * for a new one. It opens on what it is asked, and configures as the test
+   * says.
+   */
+  function modelHost(options: { defaultLevel?: string; open?: (body: ClientRequestBody) => Promise<HostResultBody> | undefined; configure?: (body: Extract<ClientRequestBody, { type: "session.configure" }>) => Promise<HostResultBody>; holdList?: () => Promise<void> | undefined; holdRead?: (file: string) => Promise<void> | undefined } = {}) {
+    let opens = 0;
+    return stubHost(async (body) => {
+      switch (body.type) {
+        case "sessions.list":
+          await options.holdList?.();
+          return { type: "sessions.list", journey: body.journey, sessions: [tomatoes, roses], defaults: { model: testRef, thinkingLevel: options.defaultLevel ?? "medium" } };
+        case "session.transcript":
+          await options.holdRead?.(body.sessionFile);
+          return {
+            type: "session.transcript",
+            sessionFile: body.sessionFile,
+            entries: [],
+            earlier: 0,
+            resumes: body.sessionFile === tomatoes.file ? { model: deepRef, thinkingLevel: "high" } : { model: testRef, thinkingLevel: "low" },
+          };
+        case "session.open": {
+          const answer = options.open?.(body);
+          if (answer) return answer;
+          opens += 1;
+          // On the pick, else as the file or the defaults say.
+          const own = body.sessionFile === tomatoes.file ? { model: deepRef, thinkingLevel: "high" } : body.sessionFile === roses.file ? { model: testRef, thinkingLevel: "low" } : { model: testRef, thinkingLevel: options.defaultLevel ?? "medium" };
+          const runsOn = body.model ? { model: body.model, thinkingLevel: body.thinkingLevel ?? "medium" } : own;
+          return opened(`session-${opens}`, "garden", { ...(body.sessionFile ? { sessionFile: body.sessionFile } : {}), ...runsOn });
+        }
+        case "session.configure":
+          if (options.configure) return options.configure(body);
+          return { type: "session.configure", sessionId: body.sessionId, model: body.model ?? testRef, thinkingLevel: body.thinkingLevel ?? "medium" };
+        case "session.prompt":
+          return { type: "session.prompt", sessionId: body.sessionId, disposition: "started" };
+        default:
+          throw new Error(`the stub host does not answer ${body.type}`);
+      }
+    });
+  }
+  const typesOf = (requests: ClientRequestBody[]) => requests.map((request) => request.type);
+  const settle = (sessionId: string) => applyHostEvent(event(sessionId, { type: "agent_settled", aborted: false }));
+
+  it("says what the session shown runs on: a file's own, read with it, and the Journey's defaults for a new one", async () => {
+    const { client } = modelHost();
+    await showJourney(client, garden);
+    expect(shownChoice(entry("garden"))).toEqual({ model: deepRef, thinkingLevel: "high", source: "file" });
+    startNewSession("garden");
+    expect(shownChoice(entry("garden"))).toEqual({ model: testRef, thinkingLevel: "medium", source: "defaults" });
+  });
+
+  it("holds a pick for a session not open and sends nothing for it; a look drops it", async () => {
+    const { client, requests } = modelHost({ defaultLevel: "off" });
+    await showJourney(client, garden);
+    startNewSession("garden");
+    const before = typesOf(requests);
+
+    await expect(chooseModel(client, "garden", deepModel)).resolves.toEqual({ from: "off", to: "low" });
+    await expect(chooseThinking(client, "garden", "max")).resolves.toBeUndefined();
+    expect(shownChoice(entry("garden"))).toEqual({ model: deepRef, thinkingLevel: "max", source: "pick" });
+    expect(typesOf(requests)).toEqual(before);
+
+    await chooseSession(client, "garden", roses.file);
+    expect(entry("garden")?.pick).toBeUndefined();
+    expect(shownChoice(entry("garden"))).toEqual({ model: testRef, thinkingLevel: "low", source: "file" });
+    startNewSession("garden");
+    expect(shownChoice(entry("garden"))).toEqual({ model: testRef, thinkingLevel: "off", source: "defaults" });
+  });
+
+  it("holds no pick that only says what is shown already", async () => {
+    const { client } = modelHost();
+    await showJourney(client, garden);
+    await chooseModel(client, "garden", deepModel);
+    expect(entry("garden")?.pick).toBeUndefined();
+    await chooseThinking(client, "garden", "low");
+    await chooseThinking(client, "garden", "high");
+    expect(entry("garden")?.pick).toBeUndefined();
+  });
+
+  it("carries the pick on the open, the model and its level together, and takes what the open answered", async () => {
+    const { client, requests } = modelHost();
+    await showJourney(client, garden);
+    await chooseThinking(client, "garden", "low");
+    await sendInto(client, "garden", "Hello");
+
+    expect(requests.find((request) => request.type === "session.open")).toEqual({
+      type: "session.open",
+      journey: "garden",
+      sessionFile: tomatoes.file,
+      model: deepRef,
+      thinkingLevel: "low",
+    });
+    expect(entry("garden")?.pick).toBeUndefined();
+    expect(entry("garden")?.session).toMatchObject({ model: deepRef, thinkingLevel: "low" });
+    expect(shownChoice(entry("garden"))).toEqual({ model: deepRef, thinkingLevel: "low", source: "session" });
+  });
+
+  it("keeps the pick when the open refuses its model, and names the model refused", async () => {
+    let refusing = true;
+    const { client } = modelHost({
+      open: () => (refusing ? Promise.reject(new HostRequestError("model_not_available", "No credential for anthropic: sign in first.")) : undefined),
+    });
+    await showJourney(client, garden);
+    startNewSession("garden");
+    await chooseModel(client, "garden", deepModel);
+    await sendInto(client, "garden", "Hello");
+
+    expect(entry("garden")).toMatchObject({
+      status: "failed",
+      failure: "No credential for anthropic: sign in first.",
+      draft: "Hello",
+      pick: { model: deepRef, thinkingLevel: "medium" },
+      refusedModel: deepRef,
+    });
+
+    refusing = false;
+    await send(client, "garden");
+    expect(entry("garden")?.refusedModel).toBeUndefined();
+    expect(entry("garden")).toMatchObject({ status: "open", session: { model: deepRef } });
+  });
+
+  it("names no model refused when the open failed for another reason", async () => {
+    const { client } = modelHost({ open: () => Promise.reject(new HostRequestError("session_open_failed", "Pi could not start.")) });
+    await showJourney(client, garden);
+    await chooseModel(client, "garden", testModel);
+    await sendInto(client, "garden", "Hello");
+    expect(entry("garden")).toMatchObject({ status: "failed", pick: { model: testRef, thinkingLevel: "high" } });
+    expect(entry("garden")?.refusedModel).toBeUndefined();
+  });
+
+  it("changes the open session through session.configure, the model with the level shown, and shows the answer", async () => {
+    const answer = deferred<HostResultBody>();
+    const { client, requests } = modelHost({ configure: () => answer.promise });
+    await showJourney(client, garden);
+    await sendInto(client, "garden", "Hello");
+    settle("session-1");
+
+    const changing = chooseModel(client, "garden", testModel);
+    expect(entry("garden")?.configuring).toBe(true);
+    expect(requests.at(-1)).toEqual({ type: "session.configure", sessionId: "session-1", model: testRef, thinkingLevel: "high" });
+    // Until the host answers, the header keeps what the session runs on.
+    expect(shownChoice(entry("garden"))).toEqual({ model: deepRef, thinkingLevel: "high", source: "session" });
+
+    answer.resolve({ type: "session.configure", sessionId: "session-1", model: testRef, thinkingLevel: "high" });
+    await expect(changing).resolves.toBeUndefined();
+    expect(entry("garden")?.configuring).toBe(false);
+    expect(shownChoice(entry("garden"))).toEqual({ model: testRef, thinkingLevel: "high", source: "session" });
+  });
+
+  it("says where a change moved the level, by the host's answer", async () => {
+    const { client } = modelHost();
+    await showJourney(client, garden);
+    await chooseSession(client, "garden", roses.file);
+    await chooseThinking(client, "garden", "off");
+    await sendInto(client, "garden", "Hello");
+    settle("session-1");
+    await expect(chooseModel(client, "garden", deepModel)).resolves.toEqual({ from: "off", to: "low" });
+    expect(entry("garden")?.session).toMatchObject({ model: deepRef, thinkingLevel: "low" });
+  });
+
+  it("changes nothing when the pick is what the session runs on already", async () => {
+    const { client, requests } = modelHost();
+    await showJourney(client, garden);
+    await sendInto(client, "garden", "Hello");
+    settle("session-1");
+    await chooseModel(client, "garden", deepModel);
+    await chooseThinking(client, "garden", "high");
+    expect(typesOf(requests)).not.toContain("session.configure");
+  });
+
+  it("takes no second pick while a change is in flight, and keeps the session's values when the change is refused", async () => {
+    const answer = deferred<HostResultBody>();
+    const { client, requests } = modelHost({ configure: () => answer.promise });
+    await showJourney(client, garden);
+    await sendInto(client, "garden", "Hello");
+    settle("session-1");
+
+    const changing = chooseThinking(client, "garden", "max");
+    await chooseThinking(client, "garden", "low");
+    await chooseModel(client, "garden", testModel);
+    expect(typesOf(requests).filter((type) => type === "session.configure")).toHaveLength(1);
+
+    answer.reject(new HostRequestError("model_not_available", "No credential for anthropic: sign in first."));
+    await expect(changing).rejects.toThrow("No credential for anthropic: sign in first.");
+    expect(entry("garden")).toMatchObject({ configuring: false, session: { model: deepRef, thinkingLevel: "high" } });
+  });
+
+  it("changes the session while a turn runs: Pi takes it at its next request", async () => {
+    const { client, requests } = modelHost();
+    await showJourney(client, garden);
+    await sendInto(client, "garden", "Hello");
+    expect(entry("garden")?.running).toBe(true);
+    await chooseThinking(client, "garden", "max");
+    expect(requests.at(-1)).toEqual({ type: "session.configure", sessionId: "session-1", model: deepRef, thinkingLevel: "max" });
+    expect(entry("garden")?.session).toMatchObject({ thinkingLevel: "max" });
+  });
+
+  it("writes a change's answer to the session it changed, whatever is shown when it lands", async () => {
+    const answer = deferred<HostResultBody>();
+    const { client } = modelHost({ configure: () => answer.promise });
+    await showJourney(client, garden);
+    await sendInto(client, "garden", "Hello");
+    settle("session-1");
+
+    const changing = chooseThinking(client, "garden", "max");
+    await chooseSession(client, "garden", roses.file);
+    answer.resolve({ type: "session.configure", sessionId: "session-1", model: deepRef, thinkingLevel: "max" });
+    await changing;
+    expect(entry("garden")?.session).toMatchObject({ id: "session-1", thinkingLevel: "max" });
+    expect(shownChoice(entry("garden"))).toEqual({ model: testRef, thinkingLevel: "low", source: "file" });
+  });
+
+  it("says nothing of a change the connection's loss cut off", async () => {
+    const { client } = modelHost({ configure: () => Promise.reject(new ConnectionLostError(false, 1006, "")) });
+    await showJourney(client, garden);
+    await sendInto(client, "garden", "Hello");
+    settle("session-1");
+    await expect(chooseThinking(client, "garden", "max")).resolves.toBeUndefined();
+    expect(entry("garden")).toMatchObject({ configuring: false, session: { thinkingLevel: "high" } });
+  });
+
+  it("takes no pick while the session opens", async () => {
+    const open = deferred<HostResultBody>();
+    const { client, requests } = modelHost({ open: () => open.promise });
+    await showJourney(client, garden);
+    selectJourney("garden");
+    setDraft("garden", "Hello");
+    const sending = send(client, "garden");
+    await chooseModel(client, "garden", testModel);
+    expect(entry("garden")?.pick).toBeUndefined();
+    open.resolve(opened("session-1", "garden", { sessionFile: tomatoes.file, model: deepRef, thinkingLevel: "high" }));
+    await sending;
+    expect(typesOf(requests)).not.toContain("session.configure");
+  });
+
+  it("keeps the defaults while the list is read again, and writes a file's own only for the latest look", async () => {
+    let releaseList: () => void = () => {};
+    let releaseRead: () => void = () => {};
+    let holdingList = false;
+    const { client } = modelHost({
+      holdList: () => (holdingList ? new Promise<void>((resolve) => (releaseList = resolve)) : undefined),
+      holdRead: (file) => (file === roses.file ? new Promise<void>((resolve) => (releaseRead = resolve)) : undefined),
+    });
+    await showJourney(client, garden);
+    holdingList = true;
+    const listing = refreshSessions(client, "garden");
+    expect(entry("garden")?.sessions).toMatchObject({ status: "loading", defaults: { model: testRef, thinkingLevel: "medium" } });
+    releaseList();
+    await listing;
+
+    const late = chooseSession(client, "garden", roses.file);
+    startNewSession("garden");
+    releaseRead();
+    await late;
+    expect(entry("garden")?.resumes).toBeUndefined();
+    expect(shownChoice(entry("garden"))?.source).toBe("defaults");
   });
 });

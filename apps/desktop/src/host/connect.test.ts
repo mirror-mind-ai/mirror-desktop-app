@@ -6,7 +6,7 @@ import { useJourneys } from "../journeys/store.ts";
 import { resetAllStores } from "../stores/registry.ts";
 import { ConnectionLostError, type HostConnection, HostRequestError } from "./client.ts";
 import { type ConnectionLease, connectToHost } from "./connect.ts";
-import { signedIn, tryHostAgain, useHost } from "./store.ts";
+import { readModels, signedIn, tryHostAgain, useHost } from "./store.ts";
 
 const SESSION_FILE = "/Users/test/.pi/agent/sessions/session-1.jsonl";
 
@@ -31,12 +31,12 @@ function stubHost(answers: Partial<Record<ClientRequestBody["type"], () => Promi
   return { client, requests, state };
 }
 
+const claudeTest = { provider: "anthropic", id: "claude-test", name: "Claude Test", reasoning: true, thinkingLevels: ["off", "minimal", "low", "medium", "high"] };
+const claudeDeep = { provider: "anthropic", id: "claude-deep", name: "Claude Deep", reasoning: true, thinkingLevels: ["low", "medium", "high", "xhigh", "max"] };
+
 const healthy = () =>
   stubHost({
-    "models.available": async () => ({
-      type: "models.available",
-      models: [{ provider: "anthropic", id: "claude-test", name: "Claude Test", reasoning: true, thinkingLevels: ["off", "minimal", "low", "medium", "high"] }],
-    }),
+    "models.available": async () => ({ type: "models.available", models: [claudeTest] }),
     "journeys.list": async () => ({ type: "journeys.list", journeys: [] }),
   });
 
@@ -56,21 +56,60 @@ describe("connecting to the host", () => {
     const { client, requests } = healthy();
     const held = lease();
     await connectToHost(async () => ({ client, host: identity }), held);
-    expect(useHost.getState()).toMatchObject({ status: "ready", client, identity, canUseModels: true, failure: null });
+    expect(useHost.getState()).toMatchObject({ status: "ready", client, identity, canUseModels: true, models: [claudeTest], failure: null });
     expect(useJourneys.getState()).toEqual({ status: "loaded", journeys: [] });
     expect(requests).toEqual(["models.available", "journeys.list"]);
     expect(held.client).toBe(client);
   });
 
-  it("knows when no model can be used", async () => {
-    const { client } = stubHost({
-      "models.available": async () => ({ type: "models.available", models: [] }),
+  it("knows when no model can be used, and reads the models again once a sign-in finished", async () => {
+    let models = [] as (typeof claudeTest)[];
+    const { client, requests } = stubHost({
+      "models.available": async () => ({ type: "models.available", models }),
       "journeys.list": async () => ({ type: "journeys.list", journeys: [] }),
     });
     await connectToHost(async () => ({ client, host: identity }), lease());
-    expect(useHost.getState()).toMatchObject({ status: "ready", canUseModels: false });
-    signedIn();
+    expect(useHost.getState()).toMatchObject({ status: "ready", canUseModels: false, models: [] });
+    models = [claudeTest];
+    const signing = signedIn(client);
+    // There is a model to use at once; which ones, when the host says.
     expect(useHost.getState().canUseModels).toBe(true);
+    await signing;
+    expect(useHost.getState().models).toEqual([claudeTest]);
+    expect(requests).toEqual(["models.available", "journeys.list", "models.available"]);
+  });
+
+  it("keeps the readiness a sign-in gave when the models cannot be read after it", async () => {
+    const { client } = stubHost({
+      "models.available": async () => Promise.reject(new HostRequestError("internal_failure", "The host could not complete the request.")),
+    });
+    useHost.setState({ status: "ready", client, canUseModels: false });
+    await signedIn(client);
+    expect(useHost.getState()).toMatchObject({ canUseModels: true, models: [] });
+  });
+
+  it("replaces the models when they are read again, and never takes readiness back, so a conversation never vanishes behind sign-in", async () => {
+    let answer: () => Promise<HostResultBody> = async () => ({ type: "models.available", models: [claudeTest, claudeDeep] });
+    const { client } = stubHost({ "models.available": () => answer() });
+    useHost.setState({ status: "ready", client, canUseModels: true, models: [claudeTest] });
+    await readModels(client);
+    expect(useHost.getState()).toMatchObject({ canUseModels: true, models: [claudeTest, claudeDeep] });
+
+    answer = async () => ({ type: "models.available", models: [] });
+    await readModels(client);
+    expect(useHost.getState()).toMatchObject({ canUseModels: true, models: [] });
+
+    useHost.setState({ models: [claudeTest] });
+    answer = () => Promise.reject(new HostRequestError("internal_failure", "The host could not complete the request."));
+    await readModels(client);
+    expect(useHost.getState().models).toEqual([claudeTest]);
+  });
+
+  it("ignores models read on a connection the shell has since replaced", async () => {
+    const { client } = stubHost({ "models.available": async () => ({ type: "models.available", models: [claudeDeep] }) });
+    useHost.setState({ status: "ready", client: null, canUseModels: true, models: [claudeTest] });
+    await readModels(client);
+    expect(useHost.getState().models).toEqual([claudeTest]);
   });
 
   it("hands the host's events to the conversations", async () => {

@@ -6,8 +6,14 @@
 // try again, because without the host nothing in the app can work. A host
 // that was ready and then went away is the same failure, with one more thing
 // to say: a conversation was cut off, and nothing brings the host back today.
+//
+// Once ready, the store keeps the models Pi can use, each with its thinking
+// levels (CV1.DS2.US3), for the header's model and thinking lists. Reading
+// them again replaces the list and never takes readiness back: a
+// conversation in progress must not vanish behind the sign-in panel because
+// a later read came back empty.
 
-import type { HostIdentity } from "@mirror-desktop/protocol";
+import type { AvailableModel, HostIdentity } from "@mirror-desktop/protocol";
 import { create } from "zustand";
 
 import { registerStore } from "../stores/registry.ts";
@@ -29,6 +35,8 @@ export interface HostState {
   readonly identity: HostIdentity | null;
   /** Whether any model can be used right now. Meaningful once ready. */
   readonly canUseModels: boolean;
+  /** The models Pi can use, as the host last said, each with the levels Pi supports for it. */
+  readonly models: readonly AvailableModel[];
   readonly failure: string | null;
   /** The failure came after the host was ready: the person was working, and what they had on screen is gone. */
   readonly lostAfterReady: boolean;
@@ -41,6 +49,7 @@ const initialState: HostState = {
   client: null,
   identity: null,
   canUseModels: false,
+  models: [],
   failure: null,
   lostAfterReady: false,
   attempt: 0,
@@ -54,10 +63,28 @@ export function hostConnected(client: HostConnection, identity: HostIdentity): v
   useHost.setState({ status: "connected", client, identity, failure: null });
 }
 
-/** The host said whether any model can be used. Ignored from a connection the shell has since replaced. */
-export function hostReady(client: HostConnection, canUseModels: boolean): void {
+/** The host said which models can be used. Ignored from a connection the shell has since replaced. */
+export function hostReady(client: HostConnection, models: readonly AvailableModel[]): void {
   if (useHost.getState().client !== client) return;
-  useHost.setState({ status: "ready", canUseModels });
+  useHost.setState({ status: "ready", canUseModels: models.length > 0, models });
+}
+
+/**
+ * Read the models again: the list is replaced, readiness is never taken
+ * back, and a read that fails keeps the list. Ignored from a connection the
+ * shell has since replaced.
+ */
+export async function readModels(client: HostConnection): Promise<void> {
+  let models: readonly AvailableModel[];
+  try {
+    const result = await client.request({ type: "models.available" });
+    if (result.type !== "models.available") return;
+    models = result.models;
+  } catch {
+    return;
+  }
+  if (useHost.getState().client !== client) return;
+  useHost.setState((state) => ({ models, canUseModels: state.canUseModels || models.length > 0 }));
 }
 
 export function hostFailed(failure: string): void {
@@ -75,7 +102,8 @@ export function tryHostAgain(): void {
   useHost.setState((state) => ({ ...initialState, attempt: state.attempt + 1 }), true);
 }
 
-/** A sign-in finished: there is a model to use now. */
-export function signedIn(): void {
+/** A sign-in finished: there is a model to use now, and the host says which. */
+export async function signedIn(client: HostConnection): Promise<void> {
   useHost.setState({ canUseModels: true });
+  await readModels(client);
 }

@@ -22,11 +22,22 @@
 // (CV1.DS2.US2), drawn only when Pi delivers it; Stop, a refusal and a lost
 // connection give back what they took. The running turn's rules are pure, in
 // liveTurn.ts; the store sends, and applies them.
+//
+// Each conversation knows what the session shown runs on next (CV1.DS2.US3):
+// the open session's model and level, a file's own, read with it, or the
+// Journey's defaults, read with its list. A pick for a session not open is
+// held and sends nothing, since looking writes nothing; a look elsewhere
+// drops it, and the first send carries it on the open. A pick on the open
+// session is sent at once, one change at a time, and the screen takes what
+// the host answers. The rules are pure, in headerChoice.ts.
 
 import type {
+  AvailableModel,
   HostEvent,
   HostResultBody,
   Journey,
+  ModelAndLevel,
+  ModelRef,
   PromptDisposition,
   SessionEvent,
   SessionSummary,
@@ -36,6 +47,7 @@ import { create } from "zustand";
 
 import { failureOf, type HostConnection } from "../host/client.ts";
 import { registerStore } from "../stores/registry.ts";
+import { type HeaderChoice, type ModelPick, type MovedLevel, pickLevel, pickModel, sameChoice, shownChoice } from "./headerChoice.ts";
 import { afterEvent, answered, type LiveTurn, lostWithTheHost, QUIET, returnToDraft, type Sending } from "./liveTurn.ts";
 import { connectionLostNotice, extensionNotice, reduceRows, type Row, rowsOf } from "./transcript.ts";
 
@@ -45,8 +57,8 @@ export interface Session {
   readonly file: string;
   /** Where the host says the session runs, which is what the header shows once it is open. */
   readonly cwd: string;
-  /** `provider/id`, when the session has a model. */
-  readonly model?: string;
+  /** The session's model, as the host last answered; absent when it has none. */
+  readonly model?: ModelRef;
   readonly thinkingLevel: string;
 }
 
@@ -68,6 +80,8 @@ export interface SessionsList {
   /** Newest first. Kept while the list is read again. */
   readonly sessions: readonly SessionSummary[];
   readonly failure?: string;
+  /** What a new session in the Journey starts with, from Pi's settings. Kept while the list is read again. */
+  readonly defaults?: ModelAndLevel;
 }
 
 /** Reading what the conversation shows: the Journey's list first, then the session's file. */
@@ -87,6 +101,14 @@ export interface Conversation extends LiveTurn {
   readonly sessions?: SessionsList;
   /** Absent once what is shown has been read, or when there is nothing to read. */
   readonly reading?: Reading;
+  /** What resuming the file shown starts with, read with it; absent for a new session, or until read. */
+  readonly resumes?: ModelAndLevel;
+  /** The person's model and level for the session shown, held until the first send opens it. */
+  readonly pick?: ModelPick;
+  /** A change of the open session's model or level is waiting on the host. */
+  readonly configuring?: boolean;
+  /** The model the last open refused, which the header marks until the pick changes. */
+  readonly refusedModel?: ModelRef;
 }
 
 export interface ConversationsState {
@@ -234,14 +256,28 @@ export async function send(client: HostConnection, journeyId: string): Promise<P
   if (!session) {
     // A file that could not be read is resumed anyway: what failed to read it may not stop Pi.
     const resumed = before.shown.kind === "file" ? before.shown.file : undefined;
+    // The person's pick goes with the open, the model and its level together.
+    const pick = before.pick;
     update(journeyId, (conversation) => ({ ...conversation, status: "opening" }));
     let opened: HostResultBody;
     try {
-      opened = await client.request({ type: "session.open", journey: journeyId, ...(resumed ? { sessionFile: resumed } : {}) });
+      opened = await client.request({
+        type: "session.open",
+        journey: journeyId,
+        ...(resumed ? { sessionFile: resumed } : {}),
+        ...(pick ? { model: pick.model, thinkingLevel: pick.thinkingLevel } : {}),
+      });
       if (opened.type !== "session.open") throw new Error("The host answered session.open with something else.");
     } catch (error) {
       if (mine !== epoch) return;
-      update(journeyId, (conversation) => ({ ...takeBack(conversation), status: "failed", failure: failureOf(error).message }));
+      const failure = failureOf(error);
+      // The pick stays, so the header says what a retry would run on; a model the host refused is marked.
+      update(journeyId, (conversation) => ({
+        ...takeBack(conversation),
+        status: "failed",
+        failure: failure.message,
+        ...(pick && failure.code === "model_not_available" ? { refusedModel: pick.model } : {}),
+      }));
       return;
     }
     if (mine !== epoch) return;
@@ -250,7 +286,7 @@ export async function send(client: HostConnection, journeyId: string): Promise<P
     session = openedSession;
     // What failed to load is said where this session begins: after what was read, before the message.
     update(journeyId, (conversation) => ({
-      ...conversation,
+      ...withoutPick(conversation),
       status: "open",
       session: openedSession,
       shown: { kind: "file", file: openedSession.file },
@@ -357,6 +393,78 @@ export async function abort(client: HostConnection, journeyId: string): Promise<
 }
 
 /**
+ * Pick a model for the session shown. For a session not open, the pick is
+ * held and nothing is sent; on the open session it is sent at once, as a
+ * change of the model with the level shown. The level stays unless the model
+ * lacks it; resolves with where it moved when it did. Nothing while the
+ * session opens or a change is waiting on the host. A refused change
+ * rejects, so the header can say why; the connection's loss does not.
+ */
+export async function chooseModel(client: HostConnection, journeyId: string, model: AvailableModel): Promise<MovedLevel | undefined> {
+  const conversation = entryOf(journeyId);
+  const shown = choosable(conversation);
+  if (!shown) return undefined;
+  const { pick, moved } = pickModel(shown, model);
+  if (shown.source !== "session") {
+    hold(journeyId, pick);
+    return moved;
+  }
+  const after = await change(client, journeyId, shown, pick);
+  return after && after.thinkingLevel !== shown.thinkingLevel ? { from: shown.thinkingLevel, to: after.thinkingLevel } : undefined;
+}
+
+/** Pick a thinking level for the session shown: held for a session not open, sent at once for the open one. */
+export async function chooseThinking(client: HostConnection, journeyId: string, thinkingLevel: string): Promise<void> {
+  const shown = choosable(entryOf(journeyId));
+  const pick = shown && pickLevel(shown, thinkingLevel);
+  if (!shown || !pick) return;
+  if (shown.source !== "session") hold(journeyId, pick);
+  else await change(client, journeyId, shown, pick);
+}
+
+/** What the header shows, when a pick can be made now: not while the session opens or a change waits. */
+function choosable(conversation: Conversation): HeaderChoice | undefined {
+  if (conversation.status === "opening" || conversation.configuring) return undefined;
+  return shownChoice(conversation);
+}
+
+/** Hold a pick for the session shown; none when it says only what is shown already. */
+function hold(journeyId: string, pick: ModelPick): void {
+  update(journeyId, (conversation) => {
+    const underneath = shownChoice(withoutPick(conversation));
+    return sameChoice(pick, underneath) ? withoutPick(conversation) : { ...conversation, pick };
+  });
+}
+
+/** Change the open session to `pick` and take what the host answered; the answer of the session it changed. */
+async function change(client: HostConnection, journeyId: string, shown: ModelAndLevel, pick: ModelPick): Promise<ModelAndLevel | undefined> {
+  const sessionId = entryOf(journeyId).session?.id;
+  if (!sessionId || sameChoice(pick, shown)) return undefined;
+  const mine = epoch;
+  update(journeyId, (conversation) => ({ ...conversation, configuring: true }));
+  let answer: HostResultBody;
+  try {
+    answer = await client.request({ type: "session.configure", sessionId, model: pick.model, thinkingLevel: pick.thinkingLevel });
+    if (answer.type !== "session.configure") throw new Error("The host answered session.configure with something else.");
+  } catch (error) {
+    if (mine !== epoch) return undefined;
+    update(journeyId, (conversation) => ({ ...conversation, configuring: false }));
+    if (failureOf(error).code === "connection_lost") return undefined;
+    throw error;
+  }
+  if (mine !== epoch) return undefined;
+  const after: ModelAndLevel = { ...(answer.model ? { model: answer.model } : {}), thinkingLevel: answer.thinkingLevel };
+  update(journeyId, (conversation) => {
+    const session = conversation.session;
+    // By id: whatever is shown when the answer lands, it is this session's.
+    if (session?.id !== sessionId) return { ...conversation, configuring: false };
+    const { model: _was, ...rest } = session;
+    return { ...conversation, configuring: false, session: { ...rest, ...(after.model ? { model: after.model } : {}), thinkingLevel: after.thinkingLevel } };
+  });
+  return after;
+}
+
+/**
  * The connection to the host ended. A conversation whose answer was
  * streaming has nothing pending to reject (the prompt was answered before
  * the first event), so it is settled here: not running, and a notice after
@@ -438,17 +546,22 @@ async function listAndShowNewest(client: HostConnection, journeyId: string): Pro
 /** Read the Journey's list into its conversation; the sessions, or undefined when the read failed or went stale. */
 async function listSessions(client: HostConnection, journeyId: string): Promise<readonly SessionSummary[] | undefined> {
   const mine = epoch;
-  update(journeyId, (conversation) => ({ ...conversation, sessions: { status: "loading", sessions: conversation.sessions?.sessions ?? [] } }));
+  // What the list said is kept while it is read again: its sessions, and the defaults.
+  const kept = (conversation: Conversation) => ({
+    sessions: conversation.sessions?.sessions ?? [],
+    ...(conversation.sessions?.defaults ? { defaults: conversation.sessions.defaults } : {}),
+  });
+  update(journeyId, (conversation) => ({ ...conversation, sessions: { status: "loading", ...kept(conversation) } }));
   try {
     const listed = await client.request({ type: "sessions.list", journey: journeyId });
     if (listed.type !== "sessions.list") throw new Error("The host answered sessions.list with something else.");
     if (mine !== epoch) return undefined;
-    update(journeyId, (conversation) => ({ ...conversation, sessions: { status: "loaded", sessions: listed.sessions } }));
+    update(journeyId, (conversation) => ({ ...conversation, sessions: { status: "loaded", sessions: listed.sessions, defaults: listed.defaults } }));
     return listed.sessions;
   } catch (error) {
     if (mine !== epoch) return undefined;
     const failure = failureOf(error).message;
-    update(journeyId, (conversation) => ({ ...conversation, sessions: { status: "failed", sessions: conversation.sessions?.sessions ?? [], failure } }));
+    update(journeyId, (conversation) => ({ ...conversation, sessions: { status: "failed", ...kept(conversation), failure } }));
     return undefined;
   }
 }
@@ -460,7 +573,9 @@ async function readShown(client: HostConnection, journeyId: string, file: string
     const read = await client.request({ type: "session.transcript", journey: journeyId, sessionFile: file });
     if (read.type !== "session.transcript") throw new Error("The host answered session.transcript with something else.");
     if (mine !== epoch || !looking(journeyId, look)) return;
-    update(journeyId, (conversation) => withoutReading({ ...conversation, rows: [...rowsOf(read.entries, read.earlier), ...conversation.rows] }));
+    update(journeyId, (conversation) =>
+      withoutReading({ ...conversation, rows: [...rowsOf(read.entries, read.earlier), ...conversation.rows], resumes: read.resumes }),
+    );
   } catch (error) {
     if (mine !== epoch || !looking(journeyId, look)) return;
     update(journeyId, (conversation) => ({ ...conversation, reading: { status: "failed", failure: failureOf(error).message } }));
@@ -477,9 +592,19 @@ function looking(journeyId: string, look: number): boolean {
   return looks.get(journeyId) === look;
 }
 
-/** The conversation showing `shown`, from an empty transcript; a standing open failure belonged to the last look. */
+/**
+ * The conversation showing `shown`, from an empty transcript; a standing
+ * open failure, what the file shown resumes on, and a pick all belonged to
+ * the last look.
+ */
 function showing(conversation: Conversation, shown: Shown): Conversation {
-  return { ...withoutFailure(conversation), status: conversation.session ? "open" : "idle", shown, rows: [] };
+  const { resumes: _read, ...rest } = withoutPick(withoutFailure(conversation));
+  return { ...rest, status: conversation.session ? "open" : "idle", shown, rows: [] };
+}
+
+function withoutPick(conversation: Conversation): Conversation {
+  const { pick: _held, refusedModel: _refused, ...rest } = conversation;
+  return rest;
 }
 
 function withoutReading(conversation: Conversation): Conversation {
@@ -513,12 +638,13 @@ function sessionOf(opened: Extract<HostResultBody, { type: "session.open" }>): S
     id: opened.sessionId,
     file: opened.sessionFile,
     cwd: opened.cwd,
-    ...(opened.model ? { model: `${opened.model.provider}/${opened.model.id}` } : {}),
+    ...(opened.model ? { model: opened.model } : {}),
     thinkingLevel: opened.thinkingLevel,
   };
 }
 
+/** Without the last open's failure, and the model it refused. */
 function withoutFailure(conversation: Conversation): Conversation {
-  const { failure: _cleared, ...rest } = conversation;
+  const { failure: _cleared, refusedModel: _refused, ...rest } = conversation;
   return rest;
 }
