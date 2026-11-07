@@ -24,19 +24,25 @@ control. The model opens a list of the models Pi can use now, with Pi's
 default marked. The thinking level opens a list of only the levels that
 model supports, each described as Pi describes it.
 
-A choice made before the first send changes nothing until that send.
-Looking writes nothing (D14). The send then starts the session on that
-choice, or resumes it with it. Looking at another session drops a choice
-that was never sent. A choice made on the open session reaches Pi at once.
-If a turn is running, Pi applies the choice from its next step, as Ctrl+P
-and Shift+Tab do in the terminal. Either way the session file records the
-change, so `pi -r` resumes it on the same model and level.
+A choice made before the first send changes nothing until that send, and
+the header shows it as held, with the list saying it takes effect with the
+first message. Looking writes nothing (D14). The send then starts the
+session on that choice, or resumes it with it. Looking at another session
+drops a choice that was never sent. A choice made on the open session
+reaches Pi at once: the controls wait for the host's answer, and the
+header shows what the session runs on from then. If a turn is running,
+Pi applies the choice from its next request in that run, as Ctrl+P and
+Shift+Tab do in the terminal, and the list says so. Either way the
+session file records the change, so `pi -r` resumes it on the same model
+and level.
 
 Changing the model keeps the thinking level when the new model supports
 it. When it does not, the level moves to the nearest one it does support,
-by Pi's own rule. A model or a session Pi cannot use is said in the host's
-words, and nothing is half-applied. Pi's settings are never written: the
-default stays what terminal Pi says it is.
+by Pi's own rule, and a line says so. A model Pi cannot use is said in the
+host's words: on the open session the header keeps what the session runs
+on; at a send, the message is back in the draft, the choice is kept and
+marked, and the conversation says to pick another model. Pi's settings
+are never written: the default stays what terminal Pi says it is.
 
 ## Acceptance Behavior
 
@@ -51,7 +57,7 @@ Then the header shows Pi's default model and thinking level for the Journey's pr
 
 Given the session shown is not open yet
 When the person picks a model and a thinking level from the header's lists
-Then the header shows them and nothing is sent to the host
+Then the header shows them as held and nothing is sent to the host
 And the first send opens the session on them, and the header then shows what the host says the session runs on
 
 Given a choice made for a session that was never sent
@@ -60,15 +66,15 @@ Then the choice is gone and each session shows its own model and level
 
 Given the open session shown, idle or answering
 When the person picks another model or level
-Then Pi applies it from its next request, the header shows it at once, and the session's file records it, so pi -r resumes the session on it
+Then the controls wait for the host, Pi applies it from its next request, the header shows the host's answer, and the session's file records it, so pi -r resumes the session on it
 
 Given a thinking level the newly picked model does not support
 When the model changes
-Then the level moves to the nearest one the model supports, the next one up when there is one, as Pi clamps it
+Then the level moves to the nearest one the model supports, the next one up when there is one, as Pi clamps it, and a line says it moved
 
 Given a model Pi cannot use (no credential, no longer known)
 When it is picked for the open session, or a send opens a session on it
-Then the host refuses it in its own words; the header keeps what the session runs on, or the message is back in the draft and the conversation says why the session did not open
+Then the host refuses it in its own words; the header keeps what the session runs on, or the message is back in the draft, the choice is kept and marked, and the conversation says to pick another model
 
 Given the model or thinking list open while a turn runs
 When the person presses Escape
@@ -90,23 +96,26 @@ Then the default model and thinking level are unchanged
 - The host: Pi's start rule read with Pi's own pieces. A choice applied at
   open, as `pi --model … --thinking …` would start a session or `/model`
   would continue a resumed one. A change applied in turn with prompts,
-  session-only. Pi's fallback message said when a file's model cannot be
-  restored.
+  session-only, the level set after the model. Pi's fallback message said
+  when a file's model cannot be restored.
+- One clamp, Pi's, shared by the host and the UI.
 - The UI: the models kept by the host store. The choice per session shown,
-  with its rules pure. The header's two lists, sharing the sessions list's
-  listbox behavior.
+  with its rules pure. The header's two controls, a right-anchored pair
+  boxed like the sessions button, sharing its listbox behavior.
 - The fake host: the defaults, a file's own model and level, the choice at
   open, `session.configure`, and the disk keeping what each session runs on.
 
 ## Out Of Scope
 
 - Setting Pi's default model or thinking level from the app. That remains
-  terminal Pi's job.
+  terminal Pi's job, and is the first thing daily use will ask for.
+- A mark in the transcript where the model changed: the second ask.
 - Scoped models (`enabledModels`) and the cycling keys (Ctrl+P, Shift+Tab).
 - Pi's per-model thinking settings applied when the model changes.
 - A model or level that an extension or a virtual model's routing sets,
-  shown as it changes.
-- Each session's model in the sessions list. A search in the model list.
+  shown as it changes. Virtual models themselves: none on this machine.
+- Each session's model in the sessions list. A search or type-ahead in
+  the model list.
 - Signing out, and provider catalogs refreshed on demand.
 - Any change to the Mirror core or the Rust shell. What reconnects and
   restarts stays CV1.DS2.TS1's.
@@ -114,10 +123,12 @@ Then the default model and thinking level are unchanged
 ## Validation
 
 Every behavior above has a test. The protocol has its schemas. The host's
-rules are tested against stubs of Pi's settings, models and session. The
-store is tested against a stub connection, and the header against the fake
-host. The Navigator validates in the window on a Journey they name, with
-terminal Pi's `pi -r` footer as the witness of what the session file
-records and Pi's settings file as the witness that nothing changed it, by
-the route in [plan.md](plan.md#validation-route) and
-[test-guide.md](test-guide.md).
+rules are tested against stubs of Pi's settings, models and session, and
+the start rule against Pi itself. The store is tested against a stub
+connection, and the header against the fake host. The Navigator validates
+in the window on a Journey they name, with each session file's last
+entries as the witness of what it records and a diff of Pi's settings
+files as the witness that nothing changed them, by the route in
+[plan.md](plan.md#validation-route) and [test-guide.md](test-guide.md).
+The plan was reviewed through five lenses before approval
+([plan-review.md](plan-review.md)).
