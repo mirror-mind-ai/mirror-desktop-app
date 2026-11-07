@@ -2,6 +2,7 @@ import { ChevronDown } from "lucide-react";
 
 import { chooseSession, type Conversation, isWorking, refreshSessions, shownSummary, startNewSession } from "../conversations/store.ts";
 import { useHost } from "../host/store.ts";
+import { HEADER_CONTROL } from "./buttons.ts";
 import { sessionDate } from "./sessionDate.ts";
 import { useListbox } from "./useListbox.ts";
 
@@ -78,7 +79,7 @@ export function SessionsList({ journeyId, conversation }: { journeyId: string; c
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => (open ? dismiss() : showList())}
-        className="flex max-w-96 min-w-0 items-center gap-2 rounded-control px-2 py-1 text-ui text-muted outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus"
+        className={`${HEADER_CONTROL} max-w-96 text-muted`}
       >
         <span className="min-w-0 truncate">{label}</span>
         {date ? <span className="shrink-0 text-dim">{date}</span> : null}

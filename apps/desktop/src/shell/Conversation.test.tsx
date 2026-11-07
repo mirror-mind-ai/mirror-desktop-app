@@ -12,7 +12,7 @@ const streamedAnswer = loadTurn("streamed-answer");
 const answer = assistantTextOf(streamedAnswer);
 
 describe("a Journey's conversation", () => {
-  it("opens the session on the first send, then shows where it runs, its model and its thinking", async () => {
+  it("shows what the session runs on before the first send, then opens it and shows where it runs", async () => {
     const host = serveFakeHost({
       models: [model],
       journeys: [garden],
@@ -25,7 +25,10 @@ describe("a Journey's conversation", () => {
 
     await user.click(await screen.findByRole("button", { name: "Garden" }));
     expect(screen.getByText("~/garden")).toBeTruthy();
-    expect(screen.queryByText("anthropic/claude-test")).toBeNull();
+    // A new session: what it would start with, from Pi's settings, before anything opens (CV1.DS2.US3).
+    expect(await screen.findByRole("button", { name: "Model: anthropic/claude-test" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Thinking: medium" })).toBeTruthy();
+    expect(host.requestsOf("session.open")).toEqual([]);
 
     await user.type(messageBox(), "Hello{Enter}");
     await screen.findByText("~/gardens/garden");

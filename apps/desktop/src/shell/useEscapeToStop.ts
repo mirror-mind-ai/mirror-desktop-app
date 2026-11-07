@@ -9,8 +9,9 @@ import { useEffect } from "react";
  * It stops once: a held key repeats its keydown and is ignored after the
  * first. An IME that cancels its composition with Escape keeps it. And the
  * overlay rule: anything closable that handles Escape first, by preventing
- * its default (DS2.US3's model and thinking pickers will), keeps the turn
- * running; closing a menu must never stop an answer.
+ * its default (the header's lists, useListbox: the sessions, the model, the
+ * thinking level), keeps the turn running; closing a menu must never stop
+ * an answer.
  */
 export function useEscapeToStop(running: boolean, stop: () => void): void {
   useEffect(() => {

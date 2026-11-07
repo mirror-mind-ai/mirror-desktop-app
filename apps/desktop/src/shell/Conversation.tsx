@@ -8,16 +8,17 @@ import {
   showsOpenSession,
   useConversations,
 } from "../conversations/store.ts";
-import { modelLabel } from "../conversations/headerChoice.ts";
 import type { Row } from "../conversations/transcript.ts";
 import { useHost } from "../host/store.ts";
 import { Transcript } from "../transcript/Transcript.tsx";
 import { Composer } from "./Composer.tsx";
+import { ModelControl } from "./ModelControl.tsx";
 import { Pulse } from "./Pulse.tsx";
 import { RefreshJourneys } from "./RefreshJourneys.tsx";
 import { SessionsList } from "./SessionsList.tsx";
 import { shortenHome } from "./shortenHome.ts";
 import { SignInPanel } from "./SignInPanel.tsx";
+import { ThinkingControl } from "./ThinkingControl.tsx";
 
 const NO_ROWS: readonly Row[] = [];
 
@@ -28,8 +29,14 @@ const NO_ROWS: readonly Row[] = [];
  * screen is ever reused for another's. The header names the session shown
  * and opens the Journey's sessions; it says where the Journey would run
  * until a send opens the session shown, then where that session actually
- * runs, with its model and thinking level. The transcript and the composer
- * sit in the reading measure; the header spans the window.
+ * runs. At its right edge, the model and the thinking level the session
+ * shown runs on next, each a control (CV1.DS2.US3).
+ *
+ * The header is one row. As the window narrows, the path gives way first,
+ * with its ellipsis, then the session's title, then the model's name from
+ * its start, provider first; the Journey's name and the level never.
+ * The transcript and the composer sit in the reading measure; the header
+ * spans the window.
  */
 export function Conversation({ journey }: { journey: Journey }) {
   const conversation = useConversations((state) => state.entries[journey.id]);
@@ -37,6 +44,7 @@ export function Conversation({ journey }: { journey: Journey }) {
   const headingId = useId();
   const session = conversation?.status === "open" && showsOpenSession(conversation) ? conversation.session : undefined;
   const where = session?.cwd ?? journey.projectPath;
+  const choosing = journey.projectPath !== undefined && canUseModels;
 
   return (
     <section aria-labelledby={headingId} className="flex min-h-0 flex-1 flex-col">
@@ -44,12 +52,14 @@ export function Conversation({ journey }: { journey: Journey }) {
         <h1 id={headingId} className="shrink-0 text-title">
           {journey.name}
         </h1>
-        {journey.projectPath && canUseModels ? <SessionsList journeyId={journey.id} conversation={conversation} /> : null}
-        <p className="flex min-w-0 items-center gap-4 truncate font-mono text-ui text-muted">
-          {where ? <span>{shortenHome(where)}</span> : null}
-          {session?.model ? <span>{modelLabel(session.model)}</span> : null}
-          {session ? <span>thinking {session.thinkingLevel}</span> : null}
-        </p>
+        {choosing ? <SessionsList journeyId={journey.id} conversation={conversation} /> : null}
+        <p className="min-w-0 flex-1 truncate font-mono text-ui text-muted">{where ? shortenHome(where) : null}</p>
+        {choosing ? (
+          <div className="flex min-w-0 shrink-[0.1] items-center gap-1 font-mono">
+            <ModelControl journeyId={journey.id} conversation={conversation} />
+            <ThinkingControl journeyId={journey.id} conversation={conversation} />
+          </div>
+        ) : null}
       </header>
       {!journey.projectPath ? (
         <NoProjectPath journey={journey} />
@@ -89,7 +99,11 @@ function SessionState({ journeyId, where, conversation }: { journeyId: string; w
       <div className="flex flex-col gap-1 text-body">
         <p>The session could not open in {where}.</p>
         {conversation.failure ? <p className="font-mono text-ui text-muted">{conversation.failure}</p> : null}
-        <p className="text-ui text-muted">Your message is back in the composer: send it again to retry.</p>
+        <p className="text-ui text-muted">
+          {conversation.refusedModel
+            ? "Your message is back in the composer. Pick another model, then send again."
+            : "Your message is back in the composer: send it again to retry."}
+        </p>
       </div>
     );
   }

@@ -17,3 +17,15 @@ export const ACCENT_BUTTON =
  */
 export const PLAIN_BUTTON =
   "flex items-center gap-2 rounded-control border border-hairline text-ui text-ink hover:bg-hover disabled:text-dim disabled:hover:bg-transparent";
+
+/**
+ * A control in the conversation's header (the sessions, the model, the
+ * thinking level): its text in a box that shows on hover, a focus ring, a
+ * chevron after it, so a box means a control and unboxed text a label.
+ * Callers add width and color.
+ */
+export const HEADER_CONTROL =
+  "flex min-w-0 items-center gap-2 rounded-control px-2 py-1 text-ui outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus disabled:hover:bg-transparent";
+
+/** What stands in a header control's place when there is nothing to pick: the same box, no hover, no chevron. */
+export const HEADER_FACT = "flex shrink-0 items-center rounded-control px-2 py-1 text-ui";
