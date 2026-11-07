@@ -4,7 +4,7 @@
 
 **Date:** 2026-11-07
 **Reviewed:** the first version of the plan, the story and the test guide, as committed at the Plan checkpoint in `9422d1a`.
-**Outcome:** the plan was revised with the twenty-six defects below, and five rulings (R1–R5) await the Navigator; the current version is [plan.md](plan.md).
+**Outcome:** the plan was revised with the twenty-six defects below and the Navigator's rulings on R1–R5, each the recommended option; the current version is [plan.md](plan.md), approved on 2026-11-07.
 
 ## How it was reviewed
 
@@ -122,7 +122,9 @@ The Driver then verified the sharpest claims:
 
 ## Navigator rulings
 
-| Decision | Options | Recommendation |
+The Navigator took the Driver's recommendation on every decision.
+
+| Decision | Options | Recommendation, ruled |
 |---|---|---|
 | R1 — the level when the model changes (D7; all five lenses) | (a) kept, clamped to what the new model supports; (b) Pi's switch rule: the per-model setting, else the global default | **(a)**: the two controls are independent on screen, and with the Navigator's settings (b) resets the level to `medium` on every model change, which beside a thinking control reads as a fault. It departs from `/model` parity, and the file records Pi's interim level entry before the kept one (defect 1); the Navigator should know both |
 | R2 — a change while a turn runs (D8; ai-engineer R2, quality-assurance R1, product-designer R2) | (a) both controls stay live and Pi takes the change at its next request in the run; (b) the thinking control only, the model control disabled while a turn runs; (c) both disabled, as the sessions list | **(a)**: deepening a long run is the real use, it is what terminal Pi's keys allow mid-stream, and the agent loop takes `agent.state.model` and `thinkingLevel` before every request after the first, verified. Route step 8 now changes the model too, within the provider, and the stop condition revisits toward (b) if Pi fails on it. A cross-provider change mid-run is allowed and consciously left out of the route |

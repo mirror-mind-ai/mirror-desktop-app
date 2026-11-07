@@ -20,9 +20,9 @@ session shown runs on next:
 
 No DS2 Planning Input names this story. Inputs 1 and 2 stay with TS1.
 
-This is the second version of the plan, revised after a five-lens review;
-see [plan-review.md](plan-review.md). Five rulings, R1–R5, await the
-Navigator under the Approval Gate.
+This is the second version of the plan, revised after a five-lens review
+and the Navigator's rulings on R1–R5, each the recommended option; see
+[plan-review.md](plan-review.md).
 
 Read from the code, not guessed (Pi 1.4.0, `mirror-mind` 0.38.0):
 
@@ -540,17 +540,12 @@ stubs prove the host's rules. Only the window with Pi proves four things:
 
 - active checkpoint: `after_plan`
 - pending confirmation: `navigator_approval`
-- implementation remains blocked until Navigator approval, with R1–R5
-  ruled; the options and the reasoning are in
-  [plan-review.md](plan-review.md#navigator-rulings):
-  - **R1 (D7):** a model change keeps the level, clamped (recommended),
-    or applies Pi's switch rule.
-  - **R2 (D8):** a change during a run is allowed, both controls
-    (recommended); the thinking control only; or both disabled.
-  - **R3 (D9):** the app never writes Pi's settings (recommended), or it
-    offers "set as default".
-  - **R4 (D14):** declare `pi-ai` 1.4.0 (recommended), or reimplement
-    `getSupportedThinkingLevels`.
-  - **R5 (the header at 860):** one row with the controls a right-anchored
-    pair and the path giving way first (recommended); two rows; or the
-    controls on a strip by the composer, the story reworded.
+- implementation remains blocked until Navigator approval; R1–R5 are
+  ruled, each the recommended option, with the options and the reasoning
+  in [plan-review.md](plan-review.md#navigator-rulings):
+  - **R1 (D7):** a model change keeps the level, clamped.
+  - **R2 (D8):** a change during a run is allowed, on both controls.
+  - **R3 (D9):** the app never writes Pi's settings.
+  - **R4 (D14):** `pi-ai` 1.4.0 is declared in the host.
+  - **R5 (the header at 860):** one row, the two controls a
+    right-anchored pair, the path giving way first.
