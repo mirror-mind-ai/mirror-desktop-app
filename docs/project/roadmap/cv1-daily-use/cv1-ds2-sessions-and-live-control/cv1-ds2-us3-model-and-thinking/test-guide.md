@@ -136,4 +136,38 @@ only:
 
 ## Validation Evidence
 
-Pending implementation and validation.
+Automated, on `364abad`, 2026-11-07:
+
+- `npm run typecheck` clean; `npm test` 504 passed in 45 files, no
+  unhandled error; `npm run build`; `git diff --check` clean.
+- The story's runs: protocol 28; the host's rules and turn control 45;
+  the conversations 101; the header, the sessions list and the
+  conversation 34; the host store and the fake host 84. The desktop
+  project shuffled with seeds 1, 2 and 3: 402 passed each.
+- The parity test ran Pi's own `createAgentSession` over every branch of
+  the start rule, new and resumed, hermetically; the clamp agreed with
+  `pi-ai`'s over all 1,599 models Pi knows at every level.
+- Seven mutations, each caught: the level set only when it differs from
+  the level before `setModel`, which lets Pi's switch rule win (two tests);
+  a resumed file with no level taking the model's own setting; a change
+  and a prompt no longer in order; the held pick not carried on the open;
+  a look keeping the pick of the session it left; a list that does not
+  take Escape first; `session.open` taking a model without its level.
+- The bundle staged `pi-ai` 1.4.0 beside `pi-coding-agent` 1.4.0; the
+  built app launched, its embedded host ran, and both quit with no
+  orphan.
+- The real host, started alone and asked only reads: it refused a 0.6.0
+  client and accepted 0.7.0; `sessions.list` for `mirror-desktop`
+  answered `anthropic/claude-sonnet-5-5` at `medium`, the Navigator's
+  settings; `session.transcript` for its newest session answered
+  `anthropic/claude-fable-5` at `max`, the file's own last entries.
+  `~/.pi/agent/settings.json` was byte-identical before and after.
+- Found there: the host offers **426** models, not the 25 the plan read
+  from Pi standalone. The host loads Mirror's configuration, whose
+  `OPENROUTER_API_KEY` signs OpenRouter in with 401 models, beside
+  Anthropic's 17 and OpenAI Codex's 8. The plan's Non-Goal of a search in
+  the model list rested on twenty-five rows; a decision for the Navigator
+  before the route.
+
+Pending: the real turn with `--model` and `--thinking`, and the
+Navigator's route, on a Journey the Navigator names.
