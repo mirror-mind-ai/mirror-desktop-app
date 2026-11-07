@@ -76,9 +76,10 @@ What the tests prove:
   read leaves the settings files byte-identical.
 - **The fake host.** It answers the defaults and a file's own values,
   takes a choice at open and on configure, refuses an unlisted model, and
-  scripts an open's diagnostics. It records a request for a level the
-  model does not list as a violation, and its disk keeps what each
-  session was left on.
+  says Pi's fallback line where a resumed file's model is not listed. It
+  records a request for a level the model does not list, or a change
+  without its pair, as a violation, holds a change when told to, and its
+  disk keeps what each session was left on.
 - **The store.** It shows each source of the header's value in its turn,
   drops a pick on a look, carries it on the first send and replaces it
   with the answer, keeps it on a refused open. It sends a change on the

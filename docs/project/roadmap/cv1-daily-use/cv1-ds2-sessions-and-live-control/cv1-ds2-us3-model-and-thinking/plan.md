@@ -549,3 +549,59 @@ stubs prove the host's rules. Only the window with Pi proves four things:
   - **R4 (D14):** `pi-ai` 1.4.0 is declared in the host.
   - **R5 (the header at 860):** one row, the two controls a
     right-anchored pair, the path giving way first.
+
+## As Built
+
+Where the implementation departed from the plan above, and why. The
+decisions stand; these are the facts that refined them.
+
+- **Slices.** As planned: the protocol, the host's rules and wiring, and
+  the fake host together (`ae2beb0`), the bundle staged and the built app
+  started in that slice; the listbox extraction alone, the sessions list's
+  tests unchanged (`cfcbb43`); the UI's data and the store (`31cc8fd`); the
+  two controls and the header (`e79b416`); these docs.
+- **The parity test runs.** Pi's own `createAgentSession` resolves every
+  case of the start rule over a temp agent dir, with Pi's bundled catalog
+  and a runtime key Pi never sends, no network and nothing written to the
+  person's `~/.pi`, in about 100 ms. Its cases are the ones D3 and D4 name;
+  the clamp is pinned to `pi-ai`'s over all 1,599 models Pi knows.
+- **One host function for both reads (D3, D4).** `journeyStart(cwd,
+  catalog, branch?)` answers a new session's `defaults` and a file's
+  `resumes`, from the settings as the open reads them; "a file with no
+  messages" is read as Pi reads it, by whether any entry on the branch puts
+  a message in Pi's context (`sessionEntryToContextMessages`).
+- **The fake host says Pi's fallback line itself (D12).** Instead of a
+  world scripting an open's diagnostics, the fake host keeps the real
+  host's rule: a resumed file whose model the world does not list falls
+  back to the default model and the open says Pi's "Could not restore
+  model" line, unless a pick was made over it. One less thing a test can
+  script wrong.
+- **A pick that says only what is shown is no pick.** Picking, before the
+  first send, the model and level the session would start on anyway holds
+  nothing, so the header does not mark as held what is not, and the open
+  carries nothing; on the open session such a pick sends nothing. A
+  refused open's mark therefore clears when the person picks their way
+  back to the default.
+- **"New session" reads nothing more (D3).** The sessions list reads
+  itself again each time it opens, and New session is picked from it, so
+  the defaults are as fresh as the list at that moment; a second read on
+  the pick would only repeat it.
+- **A moved level is said by a toast (D7).** Sonner's toast is a polite
+  live region, and it is where the composer already says its one-off
+  lines (a message Pi ran as a command); a new status line in a one-row
+  header had no place to stand.
+- **The model's name is cut from its start (D10, R5).** One text,
+  right to left outside and isolated left to right inside (`<bdi>`), so
+  the ellipsis lands at the start: the provider gives way first, then the
+  start of the id, and the end that tells models apart stays. It replaces
+  a width threshold for the provider, and keeps the name one text, which
+  the sessions list's unchanged tests read. The model's control yields
+  only after the path and the session's title (`shrink-[0.1]`); the
+  thinking control and the Journey's name never.
+- **Names.** The held pick's type is `ModelPick` (`Pick` would shadow
+  TypeScript's own); the UI's pure rules are `headerChoice.ts`; the lists'
+  shared popover is `HeaderList.tsx`, and a fact standing in a control's
+  box is `HeaderFact`.
+- **The thinking list's default** is the Journey's default level, which is
+  Pi's global default unless the settings give the default model a level
+  of its own.

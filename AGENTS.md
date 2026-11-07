@@ -134,9 +134,11 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
     keeps one (`testing/fakeDisk.ts`); `closedSessions` says
     which sessions a later open closed. A world scripts the real host's
     failures with `failures` (`hello`, `journeys.list`, or one Journey's
-    `session.open`, `sessions.list`, `session.transcript` or `session.prompt`),
-    answered until the test calls `stopFailing()`; `heldOpens` holds a
-    `session.open` until `heldOpen(journey).release()`; a scripted turn's
+    `session.open`, `sessions.list`, `session.transcript`, `session.prompt`
+    or `session.configure`), answered until the test calls `stopFailing()`;
+    `heldOpens` holds a `session.open` until `heldOpen(journey).release()`,
+    and `heldConfigures` a `session.configure` until
+    `heldConfigure(journey).release()`; a scripted turn's
     `extensionErrors` are reported after its prompt's answer and before its
     events, as an extension failing inside Pi; a turn scripted `handled` is
     an extension command Pi runs without a run, and plays nothing. A
@@ -149,6 +151,18 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
     withdrawn into the answer, a running tool ended in error, the answer
     ended where it was, the run settled aborted. A fixture never carries
     `queue_update`: the host says the queue as it changes.
+  - A session runs on a model and a level, which the fake host keeps by the
+    real host's rules (CV1.DS2.US3): the world's `models`, each with its
+    `thinkingLevels`, are the ones Pi can use; a new session starts on the
+    Journey's `defaults` (the world's, else its first model at medium),
+    which `sessions.list` answers; a scripted session's `model` and
+    `thinkingLevel` are what its file records, which `session.transcript`
+    answers as `resumes`, falling back to the default model, with Pi's
+    line on the open, when the world does not list its own. A choice comes
+    with `session.open` or `session.configure`, a model the world does not
+    list is refused, and the disk records each. The UI offers only a
+    model's own levels and sends a model with its level: a request that
+    does otherwise is recorded.
   - happy-dom applies no CSS. A test that must prove which rule of
     `app.css` styles an element reads the stylesheet with
     `testing/stylesheet.ts`, which models the cascade those rules need.
