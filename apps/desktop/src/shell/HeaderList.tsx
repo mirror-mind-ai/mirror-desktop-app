@@ -1,22 +1,77 @@
+// The pieces the header's model and thinking controls share (CV1.DS2.US3):
+// the button that names what is shown and opens its list, what stands in
+// its place before anything is known or when there is nothing to pick, and
+// the list it opens at the header's right edge.
+
+import { ChevronDown } from "lucide-react";
 import type { KeyboardEvent, ReactNode, RefObject } from "react";
 
-import { shownChoice } from "../conversations/headerChoice.ts";
-import type { Conversation } from "../conversations/store.ts";
-import { HEADER_FACT } from "./buttons.ts";
+import { HEADER_CONTROL, HEADER_FACT } from "./buttons.ts";
+import { Pulse } from "./Pulse.tsx";
 
 /** Above the options while the session opens: the open already carries what was picked. */
 export const OPENING = "Opening the session…";
 
 /**
- * When a pick takes effect, said at the list's foot: with the first message
- * for a session not open yet; at Pi's next request while a turn runs;
- * nothing for an idle open session, where it takes effect at once.
+ * A control's button: named "<what>: <value>", opening its list. While a
+ * change waits on the host it is busy, the pulse in the chevron's place, and
+ * takes no click; busy, not disabled, so the keyboard's focus stays where
+ * the pick left it (a focused element that becomes disabled gives the focus
+ * back to the page).
  */
-export function whenItTakesEffect(conversation: Conversation | undefined): string | undefined {
-  const source = shownChoice(conversation)?.source;
-  if (source === undefined) return undefined;
-  if (source !== "session") return "Takes effect with your first message.";
-  return conversation?.running ? "Pi takes it at its next request in this run, or at your next message." : undefined;
+export function ControlButton({
+  what,
+  value,
+  open,
+  busy,
+  color,
+  title,
+  button,
+  onOpen,
+  onDismiss,
+  children,
+}: {
+  what: string;
+  value: string;
+  open: boolean;
+  busy: boolean;
+  color: string;
+  title?: string | undefined;
+  button: RefObject<HTMLButtonElement | null>;
+  onOpen: () => void;
+  onDismiss: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      ref={button}
+      type="button"
+      aria-label={`${what}: ${value}`}
+      aria-haspopup="listbox"
+      aria-expanded={open}
+      aria-busy={busy}
+      aria-disabled={busy ? "true" : undefined}
+      title={title}
+      onClick={() => {
+        if (busy) return;
+        if (open) onDismiss();
+        else onOpen();
+      }}
+      className={`${HEADER_CONTROL} ${color}`}
+    >
+      {children}
+      {busy ? <Pulse /> : <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />}
+    </button>
+  );
+}
+
+/** A control before what it shows has been read: a dim ellipsis, disabled. */
+export function ControlPlaceholder({ what }: { what: string }) {
+  return (
+    <button type="button" disabled aria-label={`${what}: reading…`} className={`${HEADER_CONTROL} shrink-0 text-dim`}>
+      …
+    </button>
+  );
 }
 
 /**

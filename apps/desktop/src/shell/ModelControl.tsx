@@ -1,14 +1,11 @@
-import { ChevronDown } from "lucide-react";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 
-import { filterModels, modelLabel, movedLevelLine, shownChoice } from "../conversations/headerChoice.ts";
+import { filterModels, modelLabel, movedLevelLine, shownChoice, whenItTakesEffect } from "../conversations/headerChoice.ts";
 import { chooseModel, type Conversation } from "../conversations/store.ts";
 import { failureOf } from "../host/client.ts";
 import { readModels, useHost } from "../host/store.ts";
-import { HEADER_CONTROL } from "./buttons.ts";
-import { HeaderList, OPENING, optionClass, whenItTakesEffect } from "./HeaderList.tsx";
-import { Pulse } from "./Pulse.tsx";
+import { ControlButton, ControlPlaceholder, HeaderList, OPENING, optionClass } from "./HeaderList.tsx";
 import { useListbox } from "./useListbox.ts";
 
 /**
@@ -68,13 +65,7 @@ export function ModelControl({ journeyId, conversation }: { journeyId: string; c
     );
   }
 
-  if (!shown) {
-    return (
-      <button type="button" disabled aria-label="Model: reading…" className={`${HEADER_CONTROL} shrink-0 text-dim`}>
-        …
-      </button>
-    );
-  }
+  if (!shown) return <ControlPlaceholder what="Model" />;
 
   const name = shown.model ? modelLabel(shown.model) : "Pi's default";
   const refused = shown.source === "pick" && conversation?.refusedModel !== undefined && shown.model !== undefined && modelLabel(conversation.refusedModel) === name;
@@ -82,24 +73,12 @@ export function ModelControl({ journeyId, conversation }: { journeyId: string; c
 
   return (
     <div ref={wrapper} className="relative min-w-0">
-      <button
-        ref={button}
-        type="button"
-        aria-label={`Model: ${name}`}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-busy={busy}
-        disabled={busy}
-        title={name}
-        onClick={() => (open ? dismiss() : showList())}
-        className={`${HEADER_CONTROL} ${color}`}
-      >
+      <ControlButton what="Model" value={name} open={open} busy={busy} color={color} title={name} button={button} onOpen={showList} onDismiss={dismiss}>
         {/* Cut from the start: right to left outside, the name isolated left to right inside. */}
         <span className="min-w-0 truncate [direction:rtl]">
           <bdi>{name}</bdi>
         </span>
-        {busy ? <Pulse /> : <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />}
-      </button>
+      </ControlButton>
       {open ? (
         <HeaderList
           label="Models"
@@ -128,7 +107,7 @@ export function ModelControl({ journeyId, conversation }: { journeyId: string; c
           activeId={optionId(active)}
           onKeyDown={onKeyDown}
           above={opening ? OPENING : undefined}
-          foot={whenItTakesEffect(conversation)}
+          foot={whenItTakesEffect(shown, conversation?.running === true)}
         >
           {listed.length === 0 ? (
             <li role="none" className="px-3 py-1.5 text-ui text-muted">

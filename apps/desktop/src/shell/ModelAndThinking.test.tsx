@@ -203,12 +203,18 @@ describe("the model and thinking in the conversation's header", () => {
     expect(host.requestsOf("session.configure")).toEqual([{ type: "session.configure", sessionId: "garden-tomatoes", model: deepRef, thinkingLevel: "low" }]);
     expect(modelButton().getAttribute("aria-busy")).toBe("true");
     expect(thinkingButton().getAttribute("aria-busy")).toBe("true");
-    expect((thinkingButton() as HTMLButtonElement).disabled).toBe(true);
+    // Busy, not disabled: the keyboard's focus stays on the control the pick came from.
+    expect(thinkingButton().getAttribute("aria-disabled")).toBe("true");
+    expect((thinkingButton() as HTMLButtonElement).disabled).toBe(false);
+    expect(document.activeElement).toBe(thinkingButton());
+    await user.click(modelButton());
+    expect(screen.queryByRole("listbox")).toBeNull();
     expect(thinkingButton().getAttribute("aria-label")).toBe("Thinking: xhigh");
 
     host.heldConfigure("garden").release();
     await waitFor(() => expect(thinkingButton().getAttribute("aria-label")).toBe("Thinking: low"));
     expect(thinkingButton().getAttribute("aria-busy")).toBe("false");
+    expect(thinkingButton().getAttribute("aria-disabled")).toBeNull();
   });
 
   it("says a refused change once, in the host's words, and keeps what the session runs on", async () => {

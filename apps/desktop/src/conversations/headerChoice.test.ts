@@ -1,7 +1,7 @@
 import type { AvailableModel } from "@mirror-desktop/protocol";
 import { describe, expect, it } from "vitest";
 
-import { filterModels, levelsOf, modelLabel, movedLevelLine, pickLevel, pickModel, type Shows, shownChoice } from "./headerChoice.ts";
+import { filterModels, levelsOf, modelLabel, whenItTakesEffect, movedLevelLine, pickLevel, pickModel, type Shows, shownChoice } from "./headerChoice.ts";
 
 const test = { provider: "anthropic", id: "claude-test" };
 const deep = { provider: "anthropic", id: "claude-deep" };
@@ -112,5 +112,19 @@ describe("the model list's filter", () => {
     expect(filterModels(models, "anthropic/claude")).toEqual([testModel, deepModel, routed]);
     expect(filterModels(models, "claude test")).toEqual([testModel]);
     expect(filterModels(models, "gpt")).toEqual([]);
+  });
+});
+
+describe("when a pick takes effect, said at a list's foot", () => {
+  it("is the first message for a session not open yet", () => {
+    for (const source of ["pick", "file", "defaults"] as const) {
+      expect(whenItTakesEffect({ thinkingLevel: "medium", source }, false)).toBe("Takes effect with your first message.");
+    }
+  });
+
+  it("is Pi's next request while a turn runs, and at once, unsaid, for an idle open session", () => {
+    expect(whenItTakesEffect({ thinkingLevel: "medium", source: "session" }, true)).toBe("Pi takes it at its next request in this run, or at your next message.");
+    expect(whenItTakesEffect({ thinkingLevel: "medium", source: "session" }, false)).toBeUndefined();
+    expect(whenItTakesEffect(undefined, false)).toBeUndefined();
   });
 });

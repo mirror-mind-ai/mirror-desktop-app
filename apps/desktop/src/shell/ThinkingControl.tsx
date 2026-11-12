@@ -1,13 +1,10 @@
-import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
-import { levelsOf, shownChoice } from "../conversations/headerChoice.ts";
+import { levelsOf, shownChoice, whenItTakesEffect } from "../conversations/headerChoice.ts";
 import { chooseThinking, type Conversation } from "../conversations/store.ts";
 import { failureOf } from "../host/client.ts";
 import { useHost } from "../host/store.ts";
-import { HEADER_CONTROL } from "./buttons.ts";
-import { HeaderFact, HeaderList, OPENING, optionClass, whenItTakesEffect } from "./HeaderList.tsx";
-import { Pulse } from "./Pulse.tsx";
+import { ControlButton, ControlPlaceholder, HeaderFact, HeaderList, OPENING, optionClass } from "./HeaderList.tsx";
 import { useListbox } from "./useListbox.ts";
 
 /**
@@ -60,13 +57,7 @@ export function ThinkingControl({ journeyId, conversation }: { journeyId: string
     chooseThinking(client, journeyId, level).catch((error: unknown) => toast.error(failureOf(error).message));
   }
 
-  if (!shown) {
-    return (
-      <button type="button" disabled aria-label="Thinking: reading…" className={`${HEADER_CONTROL} shrink-0 text-dim`}>
-        …
-      </button>
-    );
-  }
+  if (!shown) return <ControlPlaceholder what="Thinking" />;
   if (!shown.model) return <HeaderFact text="thinking …" title="Pick a model to choose its thinking level." dim />;
   if (levels.length === 0) return <HeaderFact text={`thinking ${shown.thinkingLevel}`} title="Pi cannot use this model now." />;
   if (levels.length === 1 && levels[0] === "off") return <HeaderFact text="no thinking" title="This model does not reason." />;
@@ -74,20 +65,18 @@ export function ThinkingControl({ journeyId, conversation }: { journeyId: string
   const color = shown.source === "pick" ? "text-ink" : "text-muted";
   return (
     <div ref={wrapper} className="relative shrink-0">
-      <button
-        ref={button}
-        type="button"
-        aria-label={`Thinking: ${shown.thinkingLevel}`}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-busy={busy}
-        disabled={busy}
-        onClick={() => (open ? dismiss() : show(Math.max(current, 0)))}
-        className={`${HEADER_CONTROL} ${color}`}
+      <ControlButton
+        what="Thinking"
+        value={shown.thinkingLevel}
+        open={open}
+        busy={busy}
+        color={color}
+        button={button}
+        onOpen={() => show(Math.max(current, 0))}
+        onDismiss={dismiss}
       >
         <span className="whitespace-nowrap">thinking {shown.thinkingLevel}</span>
-        {busy ? <Pulse /> : <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />}
-      </button>
+      </ControlButton>
       {open ? (
         <HeaderList
           label="Thinking levels"
@@ -95,7 +84,7 @@ export function ThinkingControl({ journeyId, conversation }: { journeyId: string
           activeId={optionId(active)}
           onKeyDown={onKeyDown}
           above={opening ? OPENING : undefined}
-          foot={whenItTakesEffect(conversation)}
+          foot={whenItTakesEffect(shown, conversation?.running === true)}
         >
           {levels.map((level, index) => (
             <li

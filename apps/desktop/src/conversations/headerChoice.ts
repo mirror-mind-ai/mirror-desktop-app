@@ -103,3 +103,14 @@ export function filterModels(models: readonly AvailableModel[], query: string): 
     return words.every((word) => text.includes(word));
   });
 }
+
+/**
+ * When a pick takes effect, said at a list's foot: with the first message
+ * for a session not open yet; at Pi's next request while a turn runs;
+ * nothing for an idle open session, where it takes effect at once.
+ */
+export function whenItTakesEffect(shown: HeaderChoice | undefined, running: boolean): string | undefined {
+  if (shown === undefined) return undefined;
+  if (shown.source !== "session") return "Takes effect with your first message.";
+  return running ? "Pi takes it at its next request in this run, or at your next message." : undefined;
+}
