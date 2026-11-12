@@ -116,6 +116,13 @@ npm run bundle --workspace apps/desktop   # .app + .dmg with the embedded Node a
   abort and gives it back to the draft (`packages/host/src/turnControl.ts`);
   the running turn's rules in the UI are pure, in
   `apps/desktop/src/conversations/liveTurn.ts`.
+- **A session's model and thinking are chosen as Pi's `/model` does**
+  (D18): for the session only, recorded in its file, never in Pi's
+  settings; a model change keeps the shown level, set after the model; the
+  list holds only models whose credential is Pi's own. The host's start
+  rule copies Pi's and its parity test runs Pi's own
+  (`packages/host/src/modelChoice.ts`); the header's rules are pure, in
+  `apps/desktop/src/conversations/headerChoice.ts`.
 - **TDD for behavior.** A feature or fix starts with a failing test; error
   paths carry the same burden as happy paths; `retry: 0`, a flaky test is
   fixed, never retried.

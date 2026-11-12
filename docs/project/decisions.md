@@ -306,3 +306,37 @@ kind is a candidate for the core, not a prerequisite
 ([predecessor](history/predecessor.md#core-owned-prerequisites)). TS1
 builds on this: a reconnected UI can rebuild a turn in flight from Pi's
 queue, since the host keeps none.
+
+## D18 — A session's model and thinking are chosen as Pi's `/model` and `/thinking` choose them
+
+**Date:** 2026-11-12 · **Story:** [CV1.DS2.US3](roadmap/cv1-daily-use/cv1-ds2-sessions-and-live-control/cv1-ds2-us3-model-and-thinking/index.md)
+
+The conversation's header always says what the session shown runs on next:
+the open session's own, a file's own before it opens, or, for a new
+session, Pi's default for the Journey's project, from Pi's settings. Each is
+a control. A choice is for the session only, as terminal Pi's `/model` and
+`/thinking` make it on Enter: recorded in the session file, so `pi -r`
+resumes on it, and never written to Pi's settings, which stay where
+terminal Pi changes them. Before the first send a choice is held and sends
+nothing, since looking writes nothing (D14); the send opens the session on
+it. On the open session it reaches Pi at once, in line with its prompts,
+and during a run Pi takes it at its next request, as Ctrl+P does mid-stream.
+
+A model change keeps the level the screen shows, clamped to what the new
+model supports by Pi's own rule, and the host sets it after the model,
+since Pi's `setModel` first moves the level by its switch rule (the
+model's setting, else the default). That departs from `/model`, which
+resets the level, because the two controls sit side by side. The levels
+offered are only the model's own, in Pi's words.
+
+The person picks among the models Pi itself has a credential for, in
+`auth.json` or its `models.json`, both shared with terminal Pi. The host
+also sees providers through its environment, which Mirror's configuration
+fills (OpenRouter's key, on the Navigator's machine); their models are not
+offered, since a session moved to one would not resume on it in the
+terminal. The list opens on a filter, as `/model` opens on its search.
+
+What a session starts with is Pi's rule, which Pi does not export: the
+host reproduces it (`packages/host/src/modelChoice.ts`) and a test runs the
+same cases through Pi's own `createAgentSession`, so a Pi upgrade that moves
+it fails there.
