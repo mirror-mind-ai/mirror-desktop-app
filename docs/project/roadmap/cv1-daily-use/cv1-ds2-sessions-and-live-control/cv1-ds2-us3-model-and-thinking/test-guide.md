@@ -176,5 +176,11 @@ more mutation caught (a filter that keeps every model); the gate again:
 508 passed in 45 files, the desktop project 406 passed under each of
 seeds 1 to 3, the build, `git diff --check`.
 
-Pending: the real turn with `--model` and `--thinking`, and the
-Navigator's route, on `automation`, the Journey the Navigator named.
+The real turn, on `automation`, the Journey the Navigator named, with
+`--model anthropic/claude-haiku-4-5 --thinking low`: the open answered
+`anthropic/claude-haiku-4-5, thinking low`, the answer was "pong", and
+after the close the session file's last entries read
+`anthropic/claude-haiku-4-5, thinking low`; `mirror conversations` lists
+it on `automation` (`82b16b29`, 2 messages).
+
+Pending: the Navigator's route, on `automation`.
