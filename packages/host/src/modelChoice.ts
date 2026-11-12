@@ -21,6 +21,12 @@
 // runs the same cases through Pi's own createAgentSession, so a Pi upgrade
 // that changes it fails there.
 //
+// The person chooses among the models Pi itself has a credential for, in
+// its own store (`auth.json`) or its `models.json`, both shared with
+// terminal Pi. A provider the host can reach only through its environment
+// (Mirror's configuration puts OPENROUTER_API_KEY there) is left out: a
+// session moved to one of its models would not resume on it in `pi -r`.
+//
 // What the person chooses is applied as terminal Pi's `/model` and
 // `/thinking` apply it: for the session only, recorded in its file, never in
 // Pi's settings. Pi's setModel moves the level by its own switch rule (the
@@ -58,9 +64,29 @@ export interface ModelCatalog {
   hasConfiguredAuth(provider: string): boolean;
 }
 
-/** The catalog with Pi's full credential check, which may refresh a token; Pi's ModelRuntime is one. */
+/** Where Pi says a provider's credential comes from; Pi's AuthStatus is one. */
+export interface CredentialStatus {
+  readonly configured: boolean;
+  readonly source?: string | undefined;
+}
+
+/** The catalog with Pi's full credential check, which may refresh a token, and where each credential comes from; Pi's ModelRuntime is one. */
 export interface CredentialCatalog extends ModelCatalog {
   checkAuth(provider: string): Promise<unknown>;
+  getProviderAuthStatus(provider: string): CredentialStatus;
+}
+
+/** The sources of a credential that is Pi's own, shared with terminal Pi: its credential store, or its models.json. */
+const PI_OWN_SOURCES: ReadonlySet<string> = new Set(["stored", "models_json_key", "models_json_command"]);
+
+/** Whether a provider's credential is Pi's own, not one the host's environment, a runtime key or an extension supplied. */
+export function credentialIsPis(status: CredentialStatus): boolean {
+  return status.configured && status.source !== undefined && PI_OWN_SOURCES.has(status.source);
+}
+
+/** The models the person can pick: those whose provider's credential is Pi's own. */
+export function modelsPiCanUse<M extends { readonly provider: string }>(models: readonly M[], catalog: Pick<CredentialCatalog, "getProviderAuthStatus">): M[] {
+  return models.filter((model) => credentialIsPis(catalog.getProviderAuthStatus(model.provider)));
 }
 
 /** What a choice reads and changes of an open Pi session; Pi's AgentSession is one. */
@@ -100,10 +126,18 @@ export async function hasCredential(catalog: CredentialCatalog, provider: string
   return catalog.hasConfiguredAuth(provider) || (await catalog.checkAuth(provider)) !== undefined;
 }
 
-/** Pi's own model for `ref`, or a refusal in the host's words when Pi does not know it or has no credential for it. */
+/**
+ * Pi's own model for `ref`, or a refusal in the host's words when Pi does
+ * not know it, has no credential of its own for it, or cannot use the one
+ * it has.
+ */
 export async function usableModel(catalog: CredentialCatalog, ref: ModelRef): Promise<Model<Api>> {
   const model = catalog.getModel(ref.provider, ref.id);
   if (!model) throw new ModelNotAvailableError(`Pi knows no model ${ref.provider}/${ref.id}.`);
+  const status = catalog.getProviderAuthStatus(ref.provider);
+  if (status.configured && !credentialIsPis(status)) {
+    throw new ModelNotAvailableError(`Pi has no credential of its own for ${ref.provider}: sign in to it first.`);
+  }
   if (!(await hasCredential(catalog, ref.provider))) throw new ModelNotAvailableError(`No credential for ${ref.provider}: sign in first.`);
   return model;
 }

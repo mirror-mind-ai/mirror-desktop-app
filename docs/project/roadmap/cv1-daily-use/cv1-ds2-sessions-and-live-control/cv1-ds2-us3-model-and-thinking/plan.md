@@ -618,3 +618,22 @@ decisions stand; these are the facts that refined them.
   nothing says so. The field is a combobox over the listbox
   (`useListbox` gains `field` and `onFieldKeyDown`; the sessions list,
   which has no field, is unchanged).
+- **Only the models Pi itself has a credential for, paid at Debt Review
+  by the Navigator's ruling.** The host loads Mirror's configuration into
+  its environment, and `OPENROUTER_API_KEY` there signed OpenRouter in for
+  the desktop alone: terminal Pi, without it, lists no OpenRouter model,
+  so a session moved to one would have fallen back in `pi -r`. The model
+  list now holds only providers whose credential Pi reports as its own,
+  `stored` in `auth.json` or from its `models.json` (`credentialIsPis`,
+  `modelsPiCanUse`), and the host refuses a pick of any other in its own
+  words. On the Navigator's machine the list went from 426 models to 26,
+  Anthropic's and OpenAI Codex's; the filter stays. Pi in the host still
+  reaches an environment-signed provider when a file or Pi's settings name
+  it, as terminal Pi would with the same environment: the rule governs
+  what the person picks, not what Pi restores.
+- **A busy control keeps the focus, paid at Debt Review.** Busy is
+  `aria-busy` and `aria-disabled` on a button that stays focusable and
+  ignores its clicks, so a keyboard user keeps their place while a change
+  waits; the two controls share that button (`ControlButton`,
+  `ControlPlaceholder` in `HeaderList.tsx`), and when a pick takes effect
+  is a pure rule in `headerChoice.ts`.

@@ -17,9 +17,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   applyChoice,
   type ChoosableSession,
+  credentialIsPis,
   fallbackLine,
   journeyStart,
   ModelNotAvailableError,
+  modelsPiCanUse,
   type StartSettings,
   startingChoice,
   usableModel,
@@ -38,11 +40,19 @@ const deep = model("anthropic", "claude-deep", { map: { off: null, minimal: null
 const plain = model("anthropic", "claude-plain", { reasoning: false });
 /** A model whose provider has no credential. */
 const distant = model("faraway", "far-1");
+/** A model whose provider's only credential is in the host's environment, not Pi's own. */
+const routed = model("openrouter", "anthropic/claude-test");
 
 const catalog = {
-  getModel: (provider: string, id: string) => [test, deep, plain, distant].find((m) => m.provider === provider && m.id === id),
-  hasConfiguredAuth: (provider: string) => provider === "anthropic",
-  checkAuth: async (provider: string) => (provider === "anthropic" ? { ok: true } : undefined),
+  getModel: (provider: string, id: string) => [test, deep, plain, distant, routed].find((m) => m.provider === provider && m.id === id),
+  hasConfiguredAuth: (provider: string) => provider === "anthropic" || provider === "openrouter",
+  checkAuth: async (provider: string) => (provider === "anthropic" || provider === "openrouter" ? { ok: true } : undefined),
+  getProviderAuthStatus: (provider: string) =>
+    provider === "anthropic"
+      ? { configured: true, source: "stored" }
+      : provider === "openrouter"
+        ? { configured: true, source: "environment", label: "OPENROUTER_API_KEY" }
+        : { configured: false },
 };
 
 function settings(values: { provider?: string; model?: string; level?: string; perModel?: Record<string, string> } = {}): StartSettings {
@@ -155,6 +165,12 @@ describe("a model the person chose", () => {
     );
   });
 
+  it("is refused when the only credential for it is in the host's environment, not Pi's own", async () => {
+    await expect(usableModel(catalog, { provider: "openrouter", id: "anthropic/claude-test" })).rejects.toThrow(
+      new ModelNotAvailableError("Pi has no credential of its own for openrouter: sign in to it first."),
+    );
+  });
+
   it("is usable when Pi's own check finds a credential the quick one does not, as a prompt is", async () => {
     const refreshed = { ...catalog, hasConfiguredAuth: () => false, checkAuth: async () => ({ ok: true }) };
     await expect(usableModel(refreshed, { provider: "anthropic", id: "claude-test" })).resolves.toBe(test);
@@ -188,6 +204,38 @@ function piSession(start: { model?: Model<Api>; level: string; defaultLevel?: st
   };
   return { session, calls, recorded };
 }
+
+describe("the models the person can pick", () => {
+  it("are those whose credential is Pi's own, shared with terminal Pi: its store or its models.json", () => {
+    expect(credentialIsPis({ configured: true, source: "stored" })).toBe(true);
+    expect(credentialIsPis({ configured: true, source: "models_json_key" })).toBe(true);
+    expect(credentialIsPis({ configured: true, source: "models_json_command" })).toBe(true);
+    for (const source of ["environment", "runtime", "fallback"]) expect(credentialIsPis({ configured: true, source }), source).toBe(false);
+    expect(credentialIsPis({ configured: false })).toBe(false);
+    expect(modelsPiCanUse([test, routed, distant], catalog)).toEqual([test]);
+  });
+
+  it("leave out, against Pi itself, a provider signed in only by the host's environment", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mirror-desktop-own-"));
+    const before = process.env.OPENROUTER_API_KEY;
+    try {
+      await writeFile(join(dir, "auth.json"), JSON.stringify({ anthropic: { type: "api_key", key: "not-a-key" } }));
+      process.env.OPENROUTER_API_KEY = "not-a-key-either";
+      const runtime = await ModelRuntime.create({ authPath: join(dir, "auth.json"), modelsPath: join(dir, "models.json"), modelsStorePath: join(dir, "store.json") });
+      const available = await runtime.getAvailable();
+      expect(new Set(available.map((m) => m.provider))).toEqual(new Set(["anthropic", "openrouter"]));
+      const listed = modelsPiCanUse(available, runtime);
+      expect(new Set(listed.map((m) => m.provider))).toEqual(new Set(["anthropic"]));
+      expect(listed.length).toBeGreaterThan(0);
+      const routedModel = available.find((m) => m.provider === "openrouter");
+      await expect(usableModel(runtime, { provider: "openrouter", id: routedModel?.id ?? "?" })).rejects.toBeInstanceOf(ModelNotAvailableError);
+    } finally {
+      if (before === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = before;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("a choice applied to an open session", () => {
   it("sets the model, then the level the person sees, so Pi's switch rule never has the last word", async () => {

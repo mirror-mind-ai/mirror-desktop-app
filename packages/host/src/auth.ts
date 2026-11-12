@@ -29,6 +29,8 @@ import type {
 } from "@mirror-desktop/protocol";
 import { newId } from "mirror-mind/ts/src/index.ts";
 
+import { modelsPiCanUse } from "./modelChoice.ts";
+
 export class AuthProviderNotFoundError extends Error {
   override readonly name = "AuthProviderNotFoundError";
 }
@@ -148,9 +150,13 @@ export class AuthBroker {
     await this.#runtime.logout(providerId);
   }
 
-  /** The models a request can be sent to now, each with the thinking levels Pi supports for it. */
+  /**
+   * The models the person can pick now, each with the thinking levels Pi
+   * supports for it: those whose credential is Pi's own (modelChoice.ts),
+   * not one the host's environment supplies, which terminal Pi lacks.
+   */
   async available(): Promise<AvailableModel[]> {
-    const models = await this.#runtime.getAvailable();
+    const models = modelsPiCanUse(await this.#runtime.getAvailable(), this.#runtime);
     return models.map((model) => ({
       provider: model.provider,
       id: model.id,
