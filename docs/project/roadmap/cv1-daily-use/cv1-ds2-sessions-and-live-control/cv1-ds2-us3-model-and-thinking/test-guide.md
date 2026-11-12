@@ -183,4 +183,30 @@ after the close the session file's last entries read
 `anthropic/claude-haiku-4-5, thinking low`; `mirror conversations` lists
 it on `automation` (`82b16b29`, 2 messages).
 
-Pending: the Navigator's route, on `automation`.
+The Navigator's route, on `automation`, 2026-11-12, accepted. The
+witnesses were the session files, read with a zsh `witness` function
+(the newest file's last `model_change` and `thinking_level_change`;
+`command ls` is not needed, since the Navigator's `ls` is `eza`), and
+Pi's settings, copied before and diffed after:
+
+- before any send, the header named the newest file's own pair, haiku at
+  low; New session showed `anthropic/claude-sonnet-5-5` at `medium`;
+- sonnet-5-5's thinking list offered low to max in Pi's words, medium
+  marked default; the model list opened on its filter and narrowed by
+  "sonnet" and "luna" across Anthropic, OpenAI Codex and OpenRouter;
+- haiku at low, held, opened a file recording haiku and low; a new
+  session on gpt-6-luna at off recorded both;
+- sonnet-5-5 picked on that open session: the file recorded sonnet, Pi's
+  interim medium, then low;
+- during a multi-tool run, high then `claude-opus-5-5`: the file recorded
+  opus, the interim medium, then high, and the run went on;
+- the older haiku file, picked to sonnet at high before its send: it
+  resumed on them, the answer naming `claude-sonnet-5-5`, the file ending
+  on sonnet and high;
+- after relaunch the header named that pair; `pi -r` on the session
+  showed `(anthropic) claude-sonnet-5-5 • high`;
+- `~/.pi/agent/settings.json` byte-identical; `automation` has no project
+  settings file.
+
+At a narrowed window the path cut off with its ellipsis while the
+Journey's name and both controls stayed whole.
