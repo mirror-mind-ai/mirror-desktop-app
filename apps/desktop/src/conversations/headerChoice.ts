@@ -89,3 +89,17 @@ export function levelsOf(model: ModelRef | undefined, models: readonly Available
 export function movedLevelLine(model: ModelRef, moved: MovedLevel): string {
   return `${model.id} has no ${moved.from}; thinking is now ${moved.to}.`;
 }
+
+/**
+ * The models whose `provider/id` or name hold every word of `query`, in
+ * Pi's order, case aside; all of them for an empty query. The list's filter,
+ * for a machine where Pi can use hundreds of models.
+ */
+export function filterModels(models: readonly AvailableModel[], query: string): readonly AvailableModel[] {
+  const words = query.toLowerCase().split(/\s+/).filter((word) => word !== "");
+  if (words.length === 0) return models;
+  return models.filter((model) => {
+    const text = `${model.provider}/${model.id} ${model.name}`.toLowerCase();
+    return words.every((word) => text.includes(word));
+  });
+}

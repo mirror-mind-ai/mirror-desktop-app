@@ -345,8 +345,8 @@ Read from the code, not guessed (Pi 1.4.0, `mirror-mind` 0.38.0):
 - The model of each session in the sessions list: it needs every file's
   model at list time, which the head-only list read (decisions.md D7, as
   built in US1) does not reach.
-- A search or type-ahead in the model list. Twenty-five rows scroll in the
-  list, which opens at the current one; revisit when daily use asks.
+- ~~A search or type-ahead in the model list.~~ Ruled in at validation
+  (see As Built): the app's host offers 426 models, not twenty-five.
 - A persistent mark on a changed control while the run continues: the
   list's foot line and the answer-driven header say what is true.
 - Refreshing provider catalogs (terminal Pi's `/model` refresh), signing
@@ -445,7 +445,7 @@ resumes nothing until step 11, when the app is quit.
 | 1 | Pick the Journey; read the most recent file's witness | Before any send, the header shows a model as `provider/id` and `thinking <level>`, boxed as controls, and the file's last entries name the same |
 | 2 | Pick "New session"; then resize the window to its minimum width | The header shows `anthropic/claude-sonnet-5-5` and `thinking medium`, the defaults in the copied settings; at 860 the two controls stay whole at the right, the path truncates with an ellipsis, the Journey's name is visible, and a list opened there is not clipped |
 | 3 | Open the thinking list; press Escape | It lists low, medium, high, xhigh and max, each with Pi's description, medium marked current and default; no off, no minimal; Escape closes it |
-| 4 | Open the model list; pick `claude-haiku-4-5`; open the thinking list; pick low | The model list shows the models with their providers and `claude-sonnet-5-5` marked default; the header shows `anthropic/claude-haiku-4-5` and `thinking medium`, then `thinking low`, both in ink as held, and the list's foot said it takes effect with the first message; the thinking list lists off, minimal, low, medium, high; no new file exists in the sessions folder |
+| 4 | Open the model list; type "haiku" in its filter and pick `claude-haiku-4-5`; open the thinking list; pick low | The model list opens with the focus in its filter, shows the models with their providers and `claude-sonnet-5-5` marked default, and narrows as you type; the header shows `anthropic/claude-haiku-4-5` and `thinking medium`, then `thinking low`, both in ink as held, and the list's foot said it takes effect with the first message; the thinking list lists off, minimal, low, medium, high; no new file exists in the sessions folder |
 | 5 | Send "Which model are you, in one line?"; when it settles, read the new file's witness | The answer streams; the header still reads haiku and low, now muted; the file's last entries are haiku and low |
 | 6 | Pick "New session"; pick `openai-codex/gpt-6-luna`, then thinking off; send "Which model are you, in one line?"; read the new file's witness | The header shows the GPT model, then `thinking off`, held; the answer comes from it; the file's last entries are gpt-6-luna and off |
 | 7 | On that open session, pick `anthropic/claude-sonnet-5-5` | Both controls busy for a moment; the header then shows sonnet and `thinking low`, and the status line says sonnet-5-5 has no off and thinking is now low; the witness shows `model_change` sonnet, then `thinking_level_change` low (an interim `medium` before it is Pi's switch rule and is expected) |
@@ -605,3 +605,16 @@ decisions stand; these are the facts that refined them.
 - **The thinking list's default** is the Journey's default level, which is
   Pi's global default unless the settings give the default model a level
   of its own.
+- **A filter in the model list, ruled in at validation (option a).** The
+  real host offers 426 models where the plan read 25 from Pi standalone:
+  it loads Mirror's configuration, whose `OPENROUTER_API_KEY` signs
+  OpenRouter in with 401. The plan had ruled out a search on the strength
+  of twenty-five rows; the Navigator ruled one in. The model list opens
+  with the focus in a filter field above its options, as Pi's `/model`
+  opens on its search line: every word typed must appear in a model's
+  `provider/id` or name, case aside (`filterModels`, pure, in
+  `headerChoice.ts`); the arrows, Enter, Escape and Tab stay the list's,
+  so Escape still closes it without stopping a turn; a query that matches
+  nothing says so. The field is a combobox over the listbox
+  (`useListbox` gains `field` and `onFieldKeyDown`; the sessions list,
+  which has no field, is unchanged).

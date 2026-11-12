@@ -86,7 +86,9 @@ What the tests prove:
   open session while idle or running, by session id, refuses a second
   pick while one is in flight, keeps the session's values on a refusal,
   and writes a read's values only for the latest look.
-- **The header.** Its two lists show the models with the default marked,
+- **The header.** The model list opens on a filter field that narrows it
+  by every word typed and picks among what is left by the keys. Its two
+  lists show the models with the default marked,
   and only the model's levels, with Pi's descriptions and the default
   tag. A held pick is drawn as held and sends nothing before the first
   send. A moved level is said. The controls are placeholders while the
@@ -169,5 +171,10 @@ Automated, on `364abad`, 2026-11-07:
   the model list rested on twenty-five rows; a decision for the Navigator
   before the route.
 
+Ruled: (a), a filter in the model list. Built, with its tests and one
+more mutation caught (a filter that keeps every model); the gate again:
+508 passed in 45 files, the desktop project 406 passed under each of
+seeds 1 to 3, the build, `git diff --check`.
+
 Pending: the real turn with `--model` and `--thinking`, and the
-Navigator's route, on a Journey the Navigator names.
+Navigator's route, on `automation`, the Journey the Navigator named.

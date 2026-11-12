@@ -83,7 +83,7 @@ describe("the model and thinking in the conversation's header", () => {
     await user.click(modelButton());
     expect(optionTexts(modelsList())).toEqual(["claude-testanthropicdefault", "claude-deepanthropic", "claude-plainanthropic"]);
     expect(within(modelsList()).getByRole("option", { selected: true }).textContent).toBe("claude-testanthropicdefault");
-    expect(document.activeElement).toBe(modelsList());
+    expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "Filter models" }));
     await user.keyboard("{Escape}");
     expect(document.activeElement).toBe(modelButton());
 
@@ -97,6 +97,48 @@ describe("the model and thinking in the conversation's header", () => {
     ]);
     expect(within(levelsList()).getByRole("option", { selected: true }).textContent).toMatch(/^medium/);
     expect(screen.getByText("Takes effect with your first message.")).toBeTruthy();
+  });
+
+  it("narrows the models as the person types, and picks among what is left by the keys", async () => {
+    const { host, user } = await newSessionOnScreen();
+    await user.click(modelButton());
+    const filter = screen.getByRole("combobox", { name: "Filter models" });
+    await user.keyboard("deep");
+    expect(optionTexts(modelsList())).toEqual(["claude-deepanthropic"]);
+    expect(filter.getAttribute("aria-activedescendant")).toBe(within(modelsList()).getByRole("option").id);
+
+    await user.clear(filter);
+    await user.keyboard("anthropic claude-p");
+    expect(optionTexts(modelsList())).toEqual(["claude-plainanthropic"]);
+    await user.keyboard("{Enter}");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(modelButton().getAttribute("aria-label")).toBe("Model: anthropic/claude-plain");
+
+    await user.click(modelButton());
+    expect(screen.getByRole("combobox", { name: "Filter models" })).toHaveProperty("value", "");
+    await user.keyboard("gpt");
+    expect(within(modelsList()).queryAllByRole("option")).toEqual([]);
+    expect(within(modelsList()).getByText("No model matches.")).toBeTruthy();
+    await user.keyboard("{Enter}");
+    expect(modelButton().getAttribute("aria-label")).toBe("Model: anthropic/claude-plain");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(modelButton());
+    expect(host.requestsOf("session.configure")).toEqual([]);
+  });
+
+  it("closes the filtered list on Escape without stopping a running turn", async () => {
+    const { host, user } = await gardenOnScreen({ turns: [{ prompt: "Hello", events: briefAnswer("Hello", "Good morning."), held: true }] });
+    await within(transcript()).findByText("Planted in the north bed.");
+    await user.type(messageBox(), "Hello{Enter}");
+    await screen.findByRole("button", { name: "Stop" });
+    await user.click(modelButton());
+    await user.keyboard("test{Escape}");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy();
+    expect(host.requestsOf("session.abort")).toEqual([]);
+    host.heldTurn().release();
+    await within(transcript()).findByText("Good morning.");
   });
 
   it("holds a pick before the first send, drawn as held, sends nothing for it, and carries it on the open", async () => {

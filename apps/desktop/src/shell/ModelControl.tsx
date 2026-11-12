@@ -1,7 +1,8 @@
 import { ChevronDown } from "lucide-react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 
-import { modelLabel, movedLevelLine, shownChoice } from "../conversations/headerChoice.ts";
+import { filterModels, modelLabel, movedLevelLine, shownChoice } from "../conversations/headerChoice.ts";
 import { chooseModel, type Conversation } from "../conversations/store.ts";
 import { failureOf } from "../host/client.ts";
 import { readModels, useHost } from "../host/store.ts";
@@ -15,7 +16,9 @@ import { useListbox } from "./useListbox.ts";
  * (CV1.DS2.US3), and the list of the models Pi can use now that it opens:
  * each by its id with its provider beside it, as Pi's `/model` lists them,
  * Pi's default marked; reading the list again when it opens, as the
- * sessions list does.
+ * sessions list does. A filter field above the options takes the focus,
+ * as the search line of Pi's `/model` does: a machine can have hundreds of
+ * models (Mirror's configuration signs OpenRouter in with four hundred).
  *
  * Its name is `provider/id`; "Pi's default" when Pi's settings name no
  * model Pi can use, which Pi then chooses at start. When the header
@@ -35,21 +38,26 @@ export function ModelControl({ journeyId, conversation }: { journeyId: string; c
   const shown = shownChoice(conversation);
   const opening = conversation?.status === "opening";
   const busy = conversation?.configuring === true;
-  const current = shown?.model ? models.findIndex((model) => model.provider === shown.model?.provider && model.id === shown.model.id) : -1;
+  const [query, setQuery] = useState("");
+  const listed = filterModels(models, query);
+  const current = shown?.model ? listed.findIndex((model) => model.provider === shown.model?.provider && model.id === shown.model.id) : -1;
   const defaultModel = conversation?.sessions?.defaults?.model;
+  const listId = useId();
 
-  const { open, active, setActive, wrapper, button, listbox, optionId, show, close, dismiss, onKeyDown } = useListbox({
-    count: models.length,
+  const { open, active, setActive, wrapper, button, listbox, field, optionId, show, close, dismiss, onKeyDown, onFieldKeyDown } = useListbox({
+    count: listed.length,
     onPick: pick,
   });
 
   function showList(): void {
-    show(Math.max(current, 0));
+    setQuery("");
+    const all = shown?.model ? models.findIndex((model) => model.provider === shown.model?.provider && model.id === shown.model.id) : -1;
+    show(Math.max(all, 0));
     if (client) void readModels(client);
   }
 
   function pick(index: number): void {
-    const model = models[index];
+    const model = listed[index];
     if (!model || opening || !client) return;
     close();
     chooseModel(client, journeyId, model).then(
@@ -95,13 +103,39 @@ export function ModelControl({ journeyId, conversation }: { journeyId: string; c
       {open ? (
         <HeaderList
           label="Models"
+          listId={listId}
+          filter={
+            <input
+              ref={field}
+              type="text"
+              role="combobox"
+              aria-label="Filter models"
+              aria-controls={listId}
+              aria-expanded="true"
+              aria-autocomplete="list"
+              aria-activedescendant={listed.length > 0 ? optionId(active) : undefined}
+              placeholder="Type to filter"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setActive(0);
+              }}
+              onKeyDown={onFieldKeyDown}
+              className="mx-2 mb-1 rounded-control border border-hairline bg-canvas px-2 py-1 text-ui text-ink outline-none placeholder:text-dim focus:border-focus"
+            />
+          }
           listbox={listbox}
           activeId={optionId(active)}
           onKeyDown={onKeyDown}
           above={opening ? OPENING : undefined}
           foot={whenItTakesEffect(conversation)}
         >
-          {models.map((model, index) => {
+          {listed.length === 0 ? (
+            <li role="none" className="px-3 py-1.5 text-ui text-muted">
+              No model matches.
+            </li>
+          ) : null}
+          {listed.map((model, index) => {
             const isDefault = defaultModel?.provider === model.provider && defaultModel.id === model.id;
             return (
               <li

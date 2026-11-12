@@ -10,6 +10,10 @@ import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
  *
  * Escape here is the overlay rule's first case (useEscapeToStop): the list
  * takes it, by preventing its default, and a running turn goes on.
+ *
+ * A list long enough to need it renders a filter field above its options
+ * (`field`): focus opens there instead, typing narrows the options, and the
+ * keys that move, pick and close are the list's (`onFieldKeyDown`).
  */
 export function useListbox({ count, onPick }: { count: number; onPick: (index: number) => void }) {
   const [open, setOpen] = useState(false);
@@ -17,12 +21,13 @@ export function useListbox({ count, onPick }: { count: number; onPick: (index: n
   const wrapper = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const listbox = useRef<HTMLUListElement>(null);
+  const field = useRef<HTMLInputElement>(null);
   const id = useId();
   const optionId = (index: number) => `${id}-option-${index}`;
 
   useEffect(() => {
     if (!open) return;
-    listbox.current?.focus();
+    (field.current ?? listbox.current)?.focus();
     const close = (event: MouseEvent) => {
       if (event.target instanceof Node && wrapper.current?.contains(event.target)) return;
       setOpen(false);
@@ -53,7 +58,7 @@ export function useListbox({ count, onPick }: { count: number; onPick: (index: n
     setOpen(false);
   }
 
-  function onKeyDown(event: KeyboardEvent<HTMLUListElement>): void {
+  function onKeyDown(event: KeyboardEvent<HTMLElement>): void {
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
@@ -89,5 +94,10 @@ export function useListbox({ count, onPick }: { count: number; onPick: (index: n
     }
   }
 
-  return { open, active, setActive, wrapper, button, listbox, optionId, show, close, dismiss, onKeyDown };
+  /** The filter field's keys: the arrows, Enter, Escape and Tab are the list's; every other key types. */
+  function onFieldKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    if (["ArrowDown", "ArrowUp", "Enter", "Escape", "Tab"].includes(event.key)) onKeyDown(event);
+  }
+
+  return { open, active, setActive, wrapper, button, listbox, field, optionId, show, close, dismiss, onKeyDown, onFieldKeyDown };
 }

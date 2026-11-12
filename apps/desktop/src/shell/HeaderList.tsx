@@ -28,26 +28,34 @@ export function whenItTakesEffect(conversation: Conversation | undefined): strin
  */
 export function HeaderList({
   label,
+  listId,
   listbox,
   activeId,
   onKeyDown,
   above,
   foot,
+  filter,
   children,
 }: {
   label: string;
+  /** The listbox's id, for a filter field that controls it. */
+  listId?: string;
   listbox: RefObject<HTMLUListElement | null>;
   activeId: string;
   onKeyDown: (event: KeyboardEvent<HTMLUListElement>) => void;
   above?: string | undefined;
   foot?: string | undefined;
+  /** A filter field above the options, for a list long enough to need one. */
+  filter?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="absolute top-full right-0 z-10 mt-1 flex w-96 flex-col rounded-control border border-hairline bg-raised py-1">
       {above ? <p className="px-3 py-1 text-ui text-muted">{above}</p> : null}
+      {filter}
       <ul
         ref={listbox}
+        id={listId}
         role="listbox"
         aria-label={label}
         tabIndex={0}

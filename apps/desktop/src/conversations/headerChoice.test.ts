@@ -1,7 +1,7 @@
 import type { AvailableModel } from "@mirror-desktop/protocol";
 import { describe, expect, it } from "vitest";
 
-import { levelsOf, modelLabel, movedLevelLine, pickLevel, pickModel, type Shows, shownChoice } from "./headerChoice.ts";
+import { filterModels, levelsOf, modelLabel, movedLevelLine, pickLevel, pickModel, type Shows, shownChoice } from "./headerChoice.ts";
 
 const test = { provider: "anthropic", id: "claude-test" };
 const deep = { provider: "anthropic", id: "claude-deep" };
@@ -94,5 +94,23 @@ describe("the header's words", () => {
 
   it("says where a level moved because the model lacked it", () => {
     expect(movedLevelLine(deep, { from: "off", to: "low" })).toBe("claude-deep has no off; thinking is now low.");
+  });
+});
+
+describe("the model list's filter", () => {
+  const routed: AvailableModel = { provider: "openrouter", id: "anthropic/claude-sonnet-4", name: "Anthropic: Claude Sonnet 4", reasoning: true, thinkingLevels: ["off", "low", "medium", "high"] };
+  const models = [testModel, deepModel, routed];
+
+  it("keeps every model for an empty query, in Pi's order", () => {
+    expect(filterModels(models, "")).toEqual(models);
+    expect(filterModels(models, "   ")).toEqual(models);
+  });
+
+  it("keeps the models whose provider/id or name hold every word, case aside", () => {
+    expect(filterModels(models, "DEEP")).toEqual([deepModel]);
+    expect(filterModels(models, "openrouter sonnet")).toEqual([routed]);
+    expect(filterModels(models, "anthropic/claude")).toEqual([testModel, deepModel, routed]);
+    expect(filterModels(models, "claude test")).toEqual([testModel]);
+    expect(filterModels(models, "gpt")).toEqual([]);
   });
 });
